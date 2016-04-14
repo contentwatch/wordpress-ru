@@ -16,15 +16,16 @@ $plugin->init();
 class ContentWatchPlugin
 {
 	protected $true_page = 'api-content-watch.php';
+	protected $settingsGroup = 'content_watch_plugin_settings';
 
 	public function init()
 	{
 		add_action('admin_head', [$this, 'content_watch_plugin_admincss']);
 		add_action('admin_head', 'content_watch_plugin_adminjs');
-		add_action('admin_menu', 'true_options');
-		add_action('admin_init', 'true_option_settings');
+		add_action('admin_menu', [$this, 'plugin_options']);
+		add_action('admin_init', [$this, 'register_settings']);
 
-		if (get_option("true_options")["Content-watch_status"] == "on") {
+		if (get_option($this->settingsGroup)["Content-watch_status"] == "on") {
 			add_filter('save_post', [$this, 'sarlab_check_callback4']);
 			add_filter('publush_post', [$this, 'sarlab_check_callback4']);
 		}
@@ -59,8 +60,8 @@ class ContentWatchPlugin
 	protected function queryAPI($text)
 	{
 		$post_data = [
-				'key' => get_option("true_options")["Content-watch_api_key"],
-				'text' => $text,
+			'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
+			'text' => $text,
 		];
 
 		$curl = curl_init();
@@ -73,95 +74,21 @@ class ContentWatchPlugin
 		return $return;
 	}
 
-	public function content_watch_plugin_admincss()
-	{
-		echo <<<HTML
-			<style type='text/css'>
-				.sarlab_column {
-					line-height: 2.2em;
-					padding-right: 15px;
-				}
-				.sarlab_check {
-					color: blue;
-					font-weight: bold;
-					cursor: pointer;
-				}
-			</style>
-HTML;
-	}
-	public function content_watch_plugin_adminjs() {
-		//$GLOBALS['menu'] = array();
-		echo <<<HTML
-		<script type="text/javascript">
-		jQuery(document).ready(function($) {
-			jQuery(".sarlab_column .sarlab_check").bind("click",function(){
-				var post_id = jQuery(this).data("id");
-				var data = {
-					action: "sarlab_check",
-					post_id: post_id
-				};
-				jQuery("#post-"+post_id+" .sarlab_column_value").html("Идет проверка");
-				jQuery.post( ajaxurl, data, function(response) {
-					jQuery("#post-"+post_id+" .sarlab_column_value").html(response);
-					console.log("Ответ сервера: " + response);
-				});
-			});
-			jQuery("#boom_sectionid_box .sarlab_check").bind("click",function(){
-				var post_id = jQuery(this).data("id");
-				var text = jQuery("textarea#content").val();
-				var data = {
-					action: "sarlab_check2",
-					text: text,
-					post_id: post_id
-				};
-				jQuery("#boom_sectionid_box .sarlab_column_value").html("Идет проверка");
-				jQuery.post( ajaxurl, data, function(response) {
-					jQuery("#boom_sectionid_box .sarlab_column_value").html(response);
-					console.log("Ответ сервера: " + response);
-				});
-			});
-			jQuery("#button_sarlab_balance").bind("click",function(){
-				var key = jQuery(this).data("id");
-				var data = {
-					action: "sarlab_check_balance",
-					key: key
-				};
-				jQuery("#sarlab_balance").val("Идет запрос");
-				jQuery.post( ajaxurl, data, function(response) {
-					jQuery("#sarlab_balance").val(response);
-					console.log("Ответ сервера: " + response);
-				});
-			});
-			jQuery(".sarlab_check_cron").bind("click",function(){
-				var post_id = jQuery(this).data("id");
-				var data = {
-					action: "boom_meta_box_ajax_callback",
-					post_id: post_id
-				};
-				jQuery("#sarlab_result").html("Идет запрос");
-				jQuery.post( ajaxurl, data, function(response) {
-					if(response=="error") {
-						jQuery("#sarlab_result").html("Результат проверки не готов");
-					} else {
-						jQuery(".sarlab_for_check").remove();
-						jQuery("#sarlab_result").html(response);
-						}
-					console.log("Ответ сервера: " + response);
-				});
-			});
-		});
-		</script>
-HTML;
-	}
-
-	public function true_options() {
-		add_options_page('Настройка Api_Content-watch', 'Настройка Content-watch', 'manage_options', $this->true_page, 'true_option_page');
+	public function plugin_options() {
+		add_options_page(
+			'Настройка Api_Content-watch',
+			'Настройка Content-watch',
+			'manage_options',
+			$this->true_page,
+			[$this, 'plugin_options_page']
+		);
 	}
 
 	/**
-	 * Возвратная функция (Callback)
+	 * Plugin options page
 	 */
-	public function true_option_page(){
+	public function plugin_options_page()
+	{
 		echo <<<HTML
 		<div class="wrap">
 			<h2>Api Content-watch</h2>
@@ -170,7 +97,7 @@ HTML;
 			https://content-watch.ru</a></p>
 			<form method="post" enctype="multipart/form-data" action="options.php">
 HTML;
-		echo settings_fields('true_options'); // название настроек)
+		echo settings_fields($this->settingsGroup);
 		echo do_settings_sections($this->true_page);
 
 		echo <<<HTML
@@ -179,14 +106,14 @@ HTML;
 				</p>
 			</form>
 		<button class="button" id="button_sarlab_balance"
-			data-id="<?php echo get_option("true_options")["Content-watch_api_key"]; ?>">
+			data-id="<?php echo get_option($this->settingsGroup)["Content-watch_api_key"]; ?>">
 			Проверить баланс
 		</button>
 HTML;
 
 		$post_data = array(
 			'action' => 'GET_BALANCE', // указываем, что нам необходимо получить баланс аккаунта
-			'key' => get_option("true_options")["Content-watch_api_key"] // ваш ключ доступа
+			'key' => get_option($this->settingsGroup)["Content-watch_api_key"] // ваш ключ доступа
 		);
 
 		$curl = curl_init();
@@ -214,13 +141,12 @@ HTML;
 
 	/*
      * Регистрируем настройки
-     * Мои настройки будут храниться в базе под названием true_options (это также видно в предыдущей функции)
      */
-	function true_option_settings()
+	function register_settings()
 	{
 		register_setting(
-			'true_options',
-			'true_options',
+			$this->settingsGroup,
+			$this->settingsGroup,
 			'true_validate_settings'
 		);
 
@@ -247,7 +173,7 @@ HTML;
 		add_settings_field(
 			'my_text_field',
 			'API key',
-			'true_option_display_settings',
+			[$this, 'display_input_field'],
 			$this->true_page,
 			'sarlab_section_1',
 			$true_field_params
@@ -261,7 +187,7 @@ HTML;
 		add_settings_field(
 			'Content-watch_status',
 			'Состояние проверок',
-			'true_option_display_settings',
+			[$this, 'display_input_field'],
 			$this->true_page,
 			'sarlab_section_1',
 			$true_field_params
@@ -272,12 +198,12 @@ HTML;
      * Функция отображения полей ввода
      * Здесь задаётся HTML и PHP, выводящий поля
      */
-	function true_option_display_settings($args) {
+	function display_input_field($args) {
 		extract( $args );
 
-		$option_name = 'true_options';
+		$option_name = $this->settingsGroup;
 
-		$o = get_option( $option_name );
+		$o = get_option($option_name);
 
 		/**
 		 * @var string $type
@@ -341,8 +267,10 @@ HTML;
 
 	function fill_boom_column($column_name, $post_id)
 	{
-		if ($column_name != 'sarlab_column')
+		if ($column_name != 'sarlab_column') {
 			return;
+		}
+
 		echo '<span class="sarlab_column_value">';
 		$date_mod = get_post($post_id, "OBJECT");
 		$date_mod_array = explode(' ', $date_mod->post_modified);
@@ -371,8 +299,8 @@ HTML;
 	function sarlab_check_balance()
 	{
 		$post_data = array(
-				'action' => 'GET_BALANCE', // указываем, что нам необходимо получить баланс аккаунта
-				'key' => get_option("true_options")["Content-watch_api_key"] // ваш ключ доступа
+			'action' => 'GET_BALANCE',
+			'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
 		);
 
 		$curl = curl_init();
@@ -383,10 +311,8 @@ HTML;
 		$return = json_decode(trim(curl_exec($curl)), TRUE);
 		curl_close($curl);
 
-		// если в ответе нет переменной error, значит запрос не удался
 		if (!empty($return['error'])) {
 			$balance = 'Возникла ошибка: ' . $return['error'];
-			// парсим ответ
 		} else {
 			$balance = $return["balance"];
 		}
@@ -403,7 +329,7 @@ HTML;
 		$text = $posts2->post_content;
 
 		$post_data = array(
-			'key' => get_option("true_options")["Content-watch_api_key"],
+			'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
 			'text' => $text,
 			'test' => 0,
 		);
@@ -416,24 +342,17 @@ HTML;
 		$return = json_decode(trim(curl_exec($curl)), TRUE);
 		curl_close($curl);
 
-		// если в ответе нет переменной error, значит запрос не удался
 		if (!isset($return['error'])) {
 			echo 'Ошибка запроса';
-
-			// если переменная error не пустая, значит при проверке возникла ошибка
 		} else if (!empty($return['error'])) {
-			$text_done = '<span title="'.$return['error'].'">Ошибка проверки</span>';
+			$text_done = '<span title="' . $return['error'].'">Ошибка проверки</span>';
 		} else {
-			$text_done = "Уникальность: ".$return["percent"]."%"; // Выводим результат
+			$text_done = "Уникальность: " . $return["percent"]."%";
 			update_post_meta( $_POST['post_id'], "content-watch-json", json_encode($return["matches"]));
 		}
-		$date_for_meta = date("Y-m-d H:i:s");
-		$date_mod_array=explode(' ',$date_for_meta);
-		$date_mod_array_date=explode('-',$date_mod_array[0]);
-		$date_mod_array_time=explode(':',$date_mod_array[1]);
-		if(get_option("gmt_offset")>0) $delta = $date_mod_array_time[0]+get_option("gmt_offset"); else $delta = $date_mod_array_time[0]-get_option("gmt_offset");
-		$date_for_meta = mktime($delta,$date_mod_array_time[1],$date_mod_array_time[2],$date_mod_array_date[1],$date_mod_array_date[2],$date_mod_array_date[0]);
-		update_post_meta( $_POST['post_id'], "content-watch-date", $date_for_meta);
+
+		$timestamp = time() + get_option('gmt_offset') * 3600;
+		update_post_meta( $_POST['post_id'], "content-watch-date", $timestamp);
 		update_post_meta( $_POST['post_id'], "content-watch", $text_done);
 		echo $text_done;
 		wp_die(); // выход нужен для того, чтобы в ответе не было ничего лишнего, только то что возвращает функция
@@ -443,9 +362,9 @@ HTML;
 	{
 		$text = $_POST['text'];
 		$post_data = array(
-				'key' => get_option("true_options")["Content-watch_api_key"],
-				'text' => $text,
-				'test' => 0 // при значении 1 вы получите валидный фиктивный ответ (проверки не будет, деньги не будут списаны)
+			'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
+			'text' => $text,
+			'test' => 0,
 		);
 
 		$curl = curl_init();
@@ -456,32 +375,30 @@ HTML;
 		$return = json_decode(trim(curl_exec($curl)), TRUE);
 		curl_close($curl);
 
-		// если в ответе нет переменной error, значит запрос не удался
 		if (!isset($return['error'])) {
 			echo 'Ошибка запроса';
-
-			// если переменная error не пустая, значит при проверке возникла ошибка
 		} else if (!empty($return['error'])) {
 			$text_done = 'Ошибка проверки: '.$return['error'];
 		} else {
-			$text_done = "Уникальность: ".$return["percent"]."%"; // Выводим результат
-			update_post_meta( $_POST['post_id'], "content-watch-json", json_encode($return["matches"]));
+			$text_done = "Уникальность: " . $return["percent"] . "%";
+			update_post_meta($_POST['post_id'], "content-watch-json", json_encode($return["matches"]));
 		}
-		$date_for_meta = date("Y-m-d H:i:s");
-		$date_mod_array=explode(' ',$date_for_meta);
-		$date_mod_array_date=explode('-',$date_mod_array[0]);
-		$date_mod_array_time=explode(':',$date_mod_array[1]);
-		if(get_option("gmt_offset")>0) $delta = $date_mod_array_time[0]+get_option("gmt_offset"); else $delta = $date_mod_array_time[0]-get_option("gmt_offset");
-		$date_for_meta = mktime($delta,$date_mod_array_time[1],$date_mod_array_time[2],$date_mod_array_date[1],$date_mod_array_date[2],$date_mod_array_date[0]);
-		update_post_meta( $_POST['post_id'], "content-watch-date", $date_for_meta);
-		update_post_meta( $_POST['post_id'], "content-watch", $text_done);
+
+		$timestamp = time() + get_option('gmt_offset') * 3600;
+		update_post_meta($_POST['post_id'], "content-watch-date", $timestamp);
+		update_post_meta($_POST['post_id'], "content-watch", $text_done);
 
 		$arr_json = $return["matches"];
-		if(isset($arr_json[0]["url"])){ $text_done .= "<table><tr><th>Сайт</th><th>Процент</th></tr>";
-			foreach($arr_json as $val){
-				$text_done .= "<tr><td><a href='".$val["url"]."' target='_blank'>".$val["url"]."</a></td><td>".$val["percent"]."</td></tr>";
+		if (isset($arr_json[0]["url"])) {
+			$text_done .= "<table><tr><th>Сайт</th><th>Процент</th></tr>";
+			foreach ($arr_json as $val) {
+				$text_done .= "<tr>
+						<td><a href='" . $val["url"] . "' target='_blank'>" . $val["url"] . "</a></td>
+						<td>" . $val["percent"] . "</td>
+					</tr>";
 			}
-			$text_done .= "</table>";}
+			$text_done .= "</table>";
+		}
 		echo $text_done;
 		wp_die(); // выход нужен для того, чтобы в ответе не было ничего лишнего, только то что возвращает функция
 	}
@@ -490,8 +407,9 @@ HTML;
 	function boom_add_custom_box()
 	{
 		$screens = array('post','page');
-		foreach ( $screens as $screen )
-			add_meta_box( 'boom_sectionid_box', 'Content-watch', 'boom_meta_box_callback', $screen, 'normal', 'high' );
+		foreach ( $screens as $screen ) {
+			add_meta_box('boom_sectionid_box', 'Content-watch', 'boom_meta_box_callback', $screen, 'normal', 'high');
+		}
 	}
 
 	function boom_meta_box_callback()
@@ -499,39 +417,56 @@ HTML;
 		global $post;
 		// Используем nonce для верификации
 		wp_nonce_field( plugin_basename(__FILE__), 'boom_noncename' );
-		if(get_post_meta( $post->ID, "content-watch-check", 1)=="check"){
+
+		if (get_post_meta( $post->ID, "content-watch-check", 1) == "check") {
 			echo '<div class="sarlab_for_check">Текст отправлен на проверку уникальности<br/><span class="button sarlab_check_cron" data-id="'.$post->ID.'">Получить результат без перезагрузки страницы</span></div><div id="sarlab_result"></div>';
 		} else {
 			// Поля формы для введения данных
-			echo '<span class="button sarlab_check" data-id="'.$post->ID.'">Проверить текст</span><div class="sarlab_column_value">'.get_post_meta($post->ID, 'content-watch', 1);
-			$arr_json = array();
+			echo '<span class="button sarlab_check" data-id="'.$post->ID.'">Проверить текст</span>
+				<div class="sarlab_column_value">'.get_post_meta($post->ID, 'content-watch', 1);
 			$arr_json2 = get_post_meta($post->ID, 'content-watch-json', 1);
 			$arr_json = json_decode($arr_json2,true);
-			if(isset($arr_json[0]["url"])){ echo "<table><tr><th>Сайт</th><th>Процент</th></tr>";
-				foreach($arr_json as $val){
-					echo "<tr><td><a href='".$val["url"]."' target='_blank'>".$val["url"]."</a></td><td>".$val["percent"]."</td></tr>";
+			if (isset($arr_json[0]["url"])) {
+				echo "<table><tr><th>Сайт</th><th>Процент</th></tr>";
+				foreach ($arr_json as $val) {
+					echo "<tr>
+							<td><a href='" . $val["url"] . "' target='_blank'>" . $val["url"] . "</a></td>
+							<td>" . $val["percent"] . "</td>
+						</tr>";
 				}
-				echo "</table>";}
-			echo '</div>';}
+				echo "</table>";
+			}
+			echo '</div>';
+		}
 	}
 
 	function boom_meta_box_ajax_callback()
 	{
 		$post_id = $_POST['post_id'];
-		if(get_post_meta( $post_id, "content-watch-check", 1)=="check"){
+		if (get_post_meta( $post_id, "content-watch-check", 1)=="check") {
 			echo 'error';
 		} else {
 			// Поля формы для введения данных
-			echo '<span class="button sarlab_check" data-id="'.$post_id.'">Проверить текст</span><div class="sarlab_column_value">'.get_post_meta($post_id, 'content-watch', 1);
-			$arr_json = array();
+			echo '<span class="button sarlab_check" data-id="'.$post_id.'">Проверить текст</span>
+				<div class="sarlab_column_value">'
+				. get_post_meta($post_id, 'content-watch', 1);
+
 			$arr_json2 = get_post_meta($post_id, 'content-watch-json', 1);
-			$arr_json = json_decode($arr_json2,true);
-			if(isset($arr_json[0]["url"])){ echo "<table><tr><th>Сайт</th><th>Процент</th></tr>";
-				foreach($arr_json as $val){
-					echo "<tr><td><a href='".$val["url"]."' target='_blank'>".$val["url"]."</a></td><td>".$val["percent"]."</td></tr>";
+			$arr_json = json_decode($arr_json2, true);
+			if (isset($arr_json[0]["url"])) {
+				echo "<table><tr><th>Сайт</th><th>Процент</th></tr>";
+				foreach($arr_json as $val) {
+					echo "<tr>
+							<td>
+								<a href='" . $val["url"] . "' target='_blank'>" . $val["url"] . "</a>
+							</td>
+							<td>".$val["percent"]."</td>
+						</tr>";
 				}
-				echo "</table>";}
-			echo '</div>';}
+				echo "</table>";
+			}
+			echo '</div>';
+		}
 
 		wp_die();
 	}
@@ -541,12 +476,11 @@ HTML;
 		$posts2 = get_post($post_ID);
 
 		$text = $posts2->post_content;
-		$date_post = $posts2->post_modified;
 
 		$post_data = array(
-				'key' => get_option("true_options")["Content-watch_api_key"],
-				'text' => $text,
-				'test' => 0 // при значении 1 вы получите валидный фиктивный ответ (проверки не будет, деньги не будут списаны)
+			'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
+			'text' => $text,
+			'test' => 0,
 		);
 
 		$curl = curl_init();
@@ -557,33 +491,111 @@ HTML;
 		$return = json_decode(trim(curl_exec($curl)), TRUE);
 		curl_close($curl);
 
-		// если в ответе нет переменной error, значит запрос не удался
 		if (!isset($return['error'])) {
 			echo 'Ошибка запроса';
 
-			// если переменная error не пустая, значит при проверке возникла ошибка
 		} else if (!empty($return['error'])) {
 			$text_done = 'Ошибка проверки: '.$return['error'];
 		} else {
-			$text_done = "Уникальность: ".$return["percent"]."%"; // Выводим результат
-			update_post_meta( $post_ID, "content-watch-json", json_encode($return["matches"]));
+			$text_done = "Уникальность: ".$return["percent"]."%";
+			update_post_meta(
+				$post_ID,
+				"content-watch-json",
+				json_encode($return["matches"])
+			);
 		}
-		$date_for_meta = date("Y-m-d H:i:s");
-		$date_mod_array=explode(' ',$date_for_meta);
-		$date_mod_array_date=explode('-',$date_mod_array[0]);
-		$date_mod_array_time=explode(':',$date_mod_array[1]);
-		if(get_option("gmt_offset")>0) $delta = $date_mod_array_time[0]+get_option("gmt_offset"); else $delta = $date_mod_array_time[0]-get_option("gmt_offset");
-		$date_for_meta = mktime($delta,$date_mod_array_time[1],$date_mod_array_time[2],$date_mod_array_date[1],$date_mod_array_date[2],$date_mod_array_date[0]);
-		update_post_meta( $post_ID, "content-watch-date", $date_for_meta);
-		update_post_meta( $post_ID, "content-watch", $text_done);
-		update_post_meta( $post_ID, "content-watch-check", "nocheck");
+
+		$timestamp = time() + get_option('gmt_offset') * 3600;
+		update_post_meta($post_ID, "content-watch-date", $timestamp);
+		update_post_meta($post_ID, "content-watch", $text_done);
+		update_post_meta($post_ID, "content-watch-check", "nocheck");
 		return true;
-		//wp_die(); // выход нужен для того, чтобы в ответе не было ничего лишнего, только то что возвращает функция
 	}
 
 	function sarlab_check_callback4($post_ID)
 	{
-		update_post_meta( $post_ID, "content-watch-check", "check");
-		wp_schedule_single_event( time() + 1, 'boom_event', array($post_ID) );
+		update_post_meta($post_ID, "content-watch-check", "check");
+		wp_schedule_single_event(time() + 1, 'boom_event', array($post_ID));
+	}
+
+	public function content_watch_plugin_admincss()
+	{
+		echo <<<HTML
+			<style type='text/css'>
+				.sarlab_column {
+					line-height: 2.2em;
+					padding-right: 15px;
+				}
+				.sarlab_check {
+					color: blue;
+					font-weight: bold;
+					cursor: pointer;
+				}
+			</style>
+HTML;
+	}
+
+	public function content_watch_plugin_adminjs() {
+		echo <<<HTML
+		<script type="text/javascript">
+		jQuery(document).ready(function($) {
+			jQuery(".sarlab_column .sarlab_check").bind("click",function(){
+				var post_id = jQuery(this).data("id");
+				var data = {
+					action: "sarlab_check",
+					post_id: post_id
+				};
+				jQuery("#post-"+post_id+" .sarlab_column_value").html("Идет проверка");
+				jQuery.post( ajaxurl, data, function(response) {
+					jQuery("#post-"+post_id+" .sarlab_column_value").html(response);
+					console.log("Ответ сервера: " + response);
+				});
+			});
+			jQuery("#boom_sectionid_box .sarlab_check").bind("click",function(){
+				var post_id = jQuery(this).data("id");
+				var text = jQuery("textarea#content").val();
+				var data = {
+					action: "sarlab_check2",
+					text: text,
+					post_id: post_id
+				};
+				jQuery("#boom_sectionid_box .sarlab_column_value").html("Идет проверка");
+				jQuery.post( ajaxurl, data, function(response) {
+					jQuery("#boom_sectionid_box .sarlab_column_value").html(response);
+					console.log("Ответ сервера: " + response);
+				});
+			});
+			jQuery("#button_sarlab_balance").bind("click",function(){
+				var key = jQuery(this).data("id");
+				var data = {
+					action: "sarlab_check_balance",
+					key: key
+				};
+				jQuery("#sarlab_balance").val("Идет запрос");
+				jQuery.post( ajaxurl, data, function(response) {
+					jQuery("#sarlab_balance").val(response);
+					console.log("Ответ сервера: " + response);
+				});
+			});
+			jQuery(".sarlab_check_cron").bind("click",function(){
+				var post_id = jQuery(this).data("id");
+				var data = {
+					action: "boom_meta_box_ajax_callback",
+					post_id: post_id
+				};
+				jQuery("#sarlab_result").html("Идет запрос");
+				jQuery.post( ajaxurl, data, function(response) {
+					if(response=="error") {
+						jQuery("#sarlab_result").html("Результат проверки не готов");
+					} else {
+						jQuery(".sarlab_for_check").remove();
+						jQuery("#sarlab_result").html(response);
+						}
+					console.log("Ответ сервера: " + response);
+				});
+			});
+		});
+		</script>
+HTML;
 	}
 }
