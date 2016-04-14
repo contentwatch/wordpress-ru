@@ -21,7 +21,7 @@ class ContentWatchPlugin
 	public function init()
 	{
 		add_action('admin_head', [$this, 'content_watch_plugin_admincss']);
-		add_action('admin_head', 'content_watch_plugin_adminjs');
+		add_action('admin_head', [$this, 'content_watch_plugin_adminjs']);
 		add_action('admin_menu', [$this, 'plugin_options']);
 		add_action('admin_init', [$this, 'register_settings']);
 
@@ -31,16 +31,16 @@ class ContentWatchPlugin
 		}
 
 		// создаем новую колонку
-		add_filter('manage_edit-post_columns', 'add_boom_column', 4);
-		add_filter('manage_edit-page_columns', 'add_boom_column', 4);
+		add_filter('manage_edit-post_columns', [$this, 'add_column'], 4);
+		add_filter('manage_edit-page_columns', [$this, 'add_column'], 4);
 
 
 		// заполняем колонку данными
-		add_filter('manage_posts_custom_column', 'fill_boom_column', 5, 2);
-		add_filter('manage_pages_custom_column', 'fill_boom_column', 5, 2);
+		add_filter('manage_posts_custom_column', [$this, 'fill_column'], 5, 2);
+		add_filter('manage_pages_custom_column', [$this, 'fill_column'], 5, 2);
 
 		/* Обработчики AJAX */
-		add_action('wp_ajax_sarlab_check_balance', 'sarlab_check_balance');
+		add_action('wp_ajax_cw_check_balance', [$this, 'check_balance']);
 
 		add_action('wp_ajax_sarlab_check', 'sarlab_check_callback');
 		add_action('wp_ajax_sarlab_check2', 'sarlab_check_callback2');
@@ -51,27 +51,6 @@ class ContentWatchPlugin
 		add_action('wp_ajax_boom_meta_box_ajax_callback', 'boom_meta_box_ajax_callback');
 
 		add_action( 'boom_event', 'sarlab_check_callback3', 10, 3 );
-	}
-
-	/**
-	 * @param string $text
-	 * @return array
-	 */
-	protected function queryAPI($text)
-	{
-		$post_data = [
-			'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
-			'text' => $text,
-		];
-
-		$curl = curl_init();
-		curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
-		curl_setopt($curl, CURLOPT_POST, TRUE);
-		curl_setopt($curl, CURLOPT_POSTFIELDS, $post_data);
-		curl_setopt($curl, CURLOPT_URL, 'https://content-watch.ru/public/api/');
-		$return = json_decode(trim(curl_exec($curl)), TRUE);
-		curl_close($curl);
-		return $return;
 	}
 
 	public function plugin_options() {
@@ -111,27 +90,8 @@ HTML;
 		</button>
 HTML;
 
-		$post_data = array(
-			'action' => 'GET_BALANCE', // указываем, что нам необходимо получить баланс аккаунта
-			'key' => get_option($this->settingsGroup)["Content-watch_api_key"] // ваш ключ доступа
-		);
-
-		$curl = curl_init();
-		curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
-		curl_setopt($curl, CURLOPT_POST, TRUE);
-		curl_setopt($curl, CURLOPT_POSTFIELDS, $post_data);
-		curl_setopt($curl, CURLOPT_URL, 'http://www.content-watch.ru/public/api/');
-		$return = json_decode(trim(curl_exec($curl)), TRUE);
-		curl_close($curl);
-
-		if (!empty($return['error'])) {
-			$balance = 'Возникла ошибка: ' . $return['error'];
-		} else {
-			$balance = $return["balance"];
-		}
-
 		echo <<<HTML
-			<input id="sarlab_balance" value="Баланс: <?php echo $balance; ?> руб."
+			<input id="sarlab_balance" value="Денег на счету: <?php echo $this->getBalanceFromAPI(); ?>"
 				disabled="disabled"><br/>
 			<a class="button" href="http://content-watch.ru/pay/#api" target="_blank">
 				Пополнить баланс</a>
@@ -142,7 +102,7 @@ HTML;
 	/*
      * Регистрируем настройки
      */
-	function register_settings()
+	public function register_settings()
 	{
 		register_setting(
 			$this->settingsGroup,
@@ -198,7 +158,7 @@ HTML;
      * Функция отображения полей ввода
      * Здесь задаётся HTML и PHP, выводящий поля
      */
-	function display_input_field($args) {
+	public function display_input_field($args) {
 		extract( $args );
 
 		$option_name = $this->settingsGroup;
@@ -251,7 +211,7 @@ HTML;
 	/*
      * Функция проверки правильности вводимых полей
      */
-	function true_validate_settings($input)
+	public function true_validate_settings($input)
 	{
 		foreach($input as $k => $v) {
 			$valid_input[$k] = trim($v);
@@ -259,33 +219,31 @@ HTML;
 		return $valid_input;
 	}
 
-	function add_boom_column( $columns )
+	/**
+	 * @param $columns
+	 * @return mixed
+	 */
+	public function add_column($columns)
 	{
 		$columns['sarlab_column'] = 'Content-watch';
 		return $columns;
 	}
 
-	function fill_boom_column($column_name, $post_id)
+	/**
+	 * @param $column_name
+	 * @param $post_id
+	 */
+	public function fill_column($column_name, $post_id)
 	{
 		if ($column_name != 'sarlab_column') {
 			return;
 		}
 
 		echo '<span class="sarlab_column_value">';
-		$date_mod = get_post($post_id, "OBJECT");
-		$date_mod_array = explode(' ', $date_mod->post_modified);
-		$date_mod_array_date = explode('-', $date_mod_array[0]);
-		$date_mod_array_time = explode(':', $date_mod_array[1]);
-		$date_mod = mktime(
-			$date_mod_array_time[0],
-			$date_mod_array_time[1],
-			$date_mod_array_time[2],
-			$date_mod_array_date[1],
-			$date_mod_array_date[2],
-			$date_mod_array_date[0]
-		);
+		$post = get_post($post_id, "OBJECT");
+		$timestamp = strtotime($post->post_modified);
 
-		if ($date_mod <= get_post_meta($post_id, 'content-watch-date', 1)) {
+		if ($timestamp <= get_post_meta($post_id, 'content-watch-date', 1)) {
 			echo get_post_meta($post_id, 'content-watch', 1) . "<br/>Последняя проверка: " . date("d.m.Y", get_post_meta($post_id, 'content-watch-date', 1));
 		} else if (get_post_meta($post_id, 'content-watch-check', 1) == "check") {
 			echo "Идет проверка";
@@ -296,33 +254,16 @@ HTML;
 		echo '</span><br/><span class="sarlab_check" data-id="' . $post_id . '">Проверить</span>';
 	}
 
-	function sarlab_check_balance()
+	/**
+	 * Using wp_die() to avoid any output
+	 */
+	public function check_balance()
 	{
-		$post_data = array(
-			'action' => 'GET_BALANCE',
-			'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
-		);
-
-		$curl = curl_init();
-		curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
-		curl_setopt($curl, CURLOPT_POST, TRUE);
-		curl_setopt($curl, CURLOPT_POSTFIELDS, $post_data);
-		curl_setopt($curl, CURLOPT_URL, 'http://www.content-watch.ru/public/api/');
-		$return = json_decode(trim(curl_exec($curl)), TRUE);
-		curl_close($curl);
-
-		if (!empty($return['error'])) {
-			$balance = 'Возникла ошибка: ' . $return['error'];
-		} else {
-			$balance = $return["balance"];
-		}
-		$text_done = "Баланс: ".$balance." руб.";
-		echo $text_done;
-		wp_die(); // выход нужен для того, чтобы в ответе не было ничего лишнего,
-		// только то что возвращает функция
+		echo "Денег на счету: " . $this->getBalanceFromAPI();
+		wp_die();
 	}
 
-	function sarlab_check_callback()
+	public function sarlab_check_callback()
 	{
 		$posts2 = get_post($_POST['post_id']);
 
@@ -358,7 +299,7 @@ HTML;
 		wp_die(); // выход нужен для того, чтобы в ответе не было ничего лишнего, только то что возвращает функция
 	}
 
-	function sarlab_check_callback2()
+	public function sarlab_check_callback2()
 	{
 		$text = $_POST['text'];
 		$post_data = array(
@@ -404,7 +345,7 @@ HTML;
 	}
 
 	/* Блок для сингла */
-	function boom_add_custom_box()
+	public function boom_add_custom_box()
 	{
 		$screens = array('post','page');
 		foreach ( $screens as $screen ) {
@@ -412,7 +353,7 @@ HTML;
 		}
 	}
 
-	function boom_meta_box_callback()
+	public function boom_meta_box_callback()
 	{
 		global $post;
 		// Используем nonce для верификации
@@ -440,7 +381,7 @@ HTML;
 		}
 	}
 
-	function boom_meta_box_ajax_callback()
+	public function boom_meta_box_ajax_callback()
 	{
 		$post_id = $_POST['post_id'];
 		if (get_post_meta( $post_id, "content-watch-check", 1)=="check") {
@@ -471,7 +412,7 @@ HTML;
 		wp_die();
 	}
 
-	function sarlab_check_callback3($post_ID)
+	public function sarlab_check_callback3($post_ID)
 	{
 		$posts2 = get_post($post_ID);
 
@@ -512,7 +453,7 @@ HTML;
 		return true;
 	}
 
-	function sarlab_check_callback4($post_ID)
+	public function sarlab_check_callback4($post_ID)
 	{
 		update_post_meta($post_ID, "content-watch-check", "check");
 		wp_schedule_single_event(time() + 1, 'boom_event', array($post_ID));
@@ -568,7 +509,7 @@ HTML;
 			jQuery("#button_sarlab_balance").bind("click",function(){
 				var key = jQuery(this).data("id");
 				var data = {
-					action: "sarlab_check_balance",
+					action: "cw_check_balance",
 					key: key
 				};
 				jQuery("#sarlab_balance").val("Идет запрос");
@@ -597,5 +538,43 @@ HTML;
 		});
 		</script>
 HTML;
+	}
+
+	/**
+	 * @return string
+	 */
+	protected function getBalanceFromAPI()
+	{
+		$params = array(
+			'action' => 'GET_BALANCE',
+		);
+		$response = $this->queryAPI($params);
+
+		if (!empty($response['error'])) {
+			return 'ошибка (' . $response['error'] . ')';
+		}
+
+		return $response["balance"] . ' руб.';
+	}
+
+	/**
+	 * @param array $params
+	 * @return array
+	 */
+	protected function queryAPI(array $params)
+	{
+		$params += array(
+			'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
+		);
+
+		$curl = curl_init();
+		curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($curl, CURLOPT_POST, true);
+		curl_setopt($curl, CURLOPT_POSTFIELDS, $params);
+		curl_setopt($curl, CURLOPT_URL, 'https://content-watch.ru/public/api/');
+		$response = json_decode(trim(curl_exec($curl)), true);
+		curl_close($curl);
+
+		return $response;
 	}
 }
