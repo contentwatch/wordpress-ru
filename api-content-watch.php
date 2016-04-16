@@ -20,37 +20,38 @@ class ContentWatchPlugin
 
     public function init()
     {
-        add_action('admin_head', [$this, 'content_watch_plugin_admincss']);
-        add_action('admin_head', [$this, 'content_watch_plugin_adminjs']);
-        add_action('admin_menu', [$this, 'plugin_options']);
-        add_action('admin_init', [$this, 'register_settings']);
+        add_action('admin_head', array($this, 'content_watch_plugin_admincss'));
+        add_action('admin_head', array($this, 'content_watch_plugin_adminjs'));
+        add_action('admin_menu', array($this, 'plugin_options'));
+        add_action('admin_init', array($this, 'register_settings'));
 
-        if (get_option($this->settingsGroup)["Content-watch_status"] == "on") {
-            add_filter('save_post', [$this, 'onPostSave']);
-            add_filter('publush_post', [$this, 'onPostSave']);
+        $options = get_option($this->settingsGroup);
+        if ($options["Content-watch_status"] == "on") {
+            add_filter('save_post', array($this, 'onPostSave'));
+            add_filter('publush_post', array($this, 'onPostSave'));
         }
 
         // создаем новую колонку
-        add_filter('manage_edit-post_columns', [$this, 'add_column'], 4);
-        add_filter('manage_edit-page_columns', [$this, 'add_column'], 4);
+        add_filter('manage_edit-post_columns', array($this, 'add_column'), 4);
+        add_filter('manage_edit-page_columns', array($this, 'add_column'), 4);
 
 
         // заполняем колонку данными
-        add_filter('manage_posts_custom_column', [$this, 'fill_column'], 5, 2);
-        add_filter('manage_pages_custom_column', [$this, 'fill_column'], 5, 2);
+        add_filter('manage_posts_custom_column', array($this, 'fill_column'), 5, 2);
+        add_filter('manage_pages_custom_column', array($this, 'fill_column'), 5, 2);
 
         /* Обработчики AJAX */
-        add_action('wp_ajax_cw_check_balance', [$this, 'check_balance']);
+        add_action('wp_ajax_cw_check_balance', array($this, 'check_balance'));
 
-        add_action('wp_ajax_check_post_by_id', [$this, 'ajaxCheckTriggerId']);
-        add_action('wp_ajax_check_post_new_text', [$this, 'ajaxCheckTriggerText']);
+        add_action('wp_ajax_check_post_by_id', array($this, 'ajaxCheckTriggerId'));
+        add_action('wp_ajax_check_post_new_text', array($this, 'ajaxCheckTriggerText'));
 
-        add_action('add_meta_boxes', [$this, 'addMetaBox']);
+        add_action('add_meta_boxes', array($this, 'addMetaBox'));
 
         /* HTML код блока */
-        add_action('wp_ajax_boom_meta_box_get_check_results', [$this, 'metaBoxGetCheckResults']);
+        add_action('wp_ajax_boom_meta_box_get_check_results', array($this, 'metaBoxGetCheckResults'));
 
-        add_action('cw_scheduled_check', [$this, 'checkPost'], 10, 3 );
+        add_action('cw_scheduled_check', array($this, 'checkPost'), 10, 3);
     }
 
     public function plugin_options() {
@@ -59,7 +60,7 @@ class ContentWatchPlugin
             'Настройка Content-watch',
             'manage_options',
             $this->true_page,
-            [$this, 'plugin_options_page']
+            array($this, 'plugin_options_page')
         );
     }
 
@@ -90,6 +91,7 @@ class ContentWatchPlugin
 HTML;
         echo settings_fields($this->settingsGroup);
         echo do_settings_sections($this->true_page);
+        $options = get_option($this->settingsGroup);
 
         echo <<<HTML
                 <p class="submit">
@@ -97,13 +99,13 @@ HTML;
                 </p>
             </form>
         <button class="button" id="button_sarlab_balance"
-            data-id="<?php echo get_option($this->settingsGroup)["Content-watch_api_key"]; ?>">
+            data-id="{$options["Content-watch_api_key"]}">
             Проверить баланс
         </button>
 HTML;
 
         echo <<<HTML
-            <input id="sarlab_balance" value="Денег на счету: <?php echo $this->getBalanceFromAPI(); ?>"
+            <input id="sarlab_balance" value="Денег на счету: {$this->getBalanceFromAPI()}"
                 disabled="disabled"><br/>
             <a class="button" href="http://content-watch.ru/pay/#api" target="_blank">
                 Пополнить баланс</a>
@@ -145,7 +147,7 @@ HTML;
         add_settings_field(
             'my_text_field',
             'API key',
-            [$this, 'display_input_field'],
+            array($this, 'display_input_field'),
             $this->true_page,
             'sarlab_section_1',
             $true_field_params
@@ -159,7 +161,7 @@ HTML;
         add_settings_field(
             'Content-watch_status',
             'Состояние проверок',
-            [$this, 'display_input_field'],
+            array($this, 'display_input_field'),
             $this->true_page,
             'sarlab_section_1',
             $true_field_params
@@ -224,7 +226,7 @@ HTML;
     {
         $screens = array('post','page');
         foreach ($screens as $screen) {
-            add_meta_box('boom_sectionid_box', 'Content-watch', [$this, 'metaBoxGetPrintCheckResults'], $screen, 'normal', 'high');
+            add_meta_box('boom_sectionid_box', 'Content-watch', array($this, 'metaBoxGetPrintCheckResults'), $screen, 'normal', 'high');
         }
     }
 
@@ -328,14 +330,14 @@ HTML;
             $post = get_post($postId);
             $text = $post->post_content;
         }
-        $return = $this->queryAPI(['text' => $text]);
+        $return = $this->queryAPI(array('text' => $text));
 
         if (!isset($return['error'])) {
             $text_done = 'Ошибка запроса на проверку уникальности';
-            update_post_meta($postId, "content-watch-json", json_encode([]));
+            update_post_meta($postId, "content-watch-json", json_encode(array()));
         } else if (!empty($return['error'])) {
             $text_done = 'Ошибка проверки: ' . $return['error'];
-            update_post_meta($postId, "content-watch-json", json_encode([]));
+            update_post_meta($postId, "content-watch-json", json_encode(array()));
         } else {
             $text_done = "Уникальность: " . $return["percent"] . "%";
             update_post_meta($postId, "content-watch-json", json_encode($return["matches"]));
@@ -380,8 +382,9 @@ HTML;
      */
     protected function queryAPI(array $params)
     {
+        $options = get_option($this->settingsGroup);
         $params += array(
-            'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
+            'key' => $options["Content-watch_api_key"],
         );
 
         $curl = curl_init();
