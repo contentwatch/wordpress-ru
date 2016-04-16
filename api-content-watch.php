@@ -108,9 +108,11 @@ HTML;
         if ($this->getOption('Content-watch_api_key')) {
             echo <<<HTML
             <h2>Ваш аккаунт</h2>
-            <p><strong>Денег на счету: {$this->getBalanceFromAPI()}</strong></p>
-            <p><button class="button" id="button_sarlab_balance" data-id="{$key}">Проверить баланс</button></p>
-            <p><a class="button" href="http://content-watch.ru/pay/#api" target="_blank">Пополнить баланс</a></p>
+            <p><strong id="cw_balance">Денег на счету: {$this->getBalanceFromAPI()}</strong></p>
+            <p>
+                <button class="button" id="button_cw_balance" data-id="{$key}">Проверить баланс</button>
+                <a class="button cw_orange" href="http://content-watch.ru/pay/#api" target="_blank">Пополнить баланс</a>
+            </p>
         </div>
 HTML;
         } else {
@@ -150,10 +152,8 @@ HTML;
             $this->pageName
         );
 
-        $desc = '* обязательно подключите API на странице
-            <a href="https://content-watch.ru/api/" target="_blank">
-                https://content-watch.ru/api/
-            </a> и введите здесь ваш уникальный ключ';
+        $desc = 'можно получить на странице
+            <a href="https://content-watch.ru/api/" target="_blank">https://content-watch.ru/api/</a>';
         $true_field_params = array(
             'type'      => 'text',
             'id'        => 'Content-watch_api_key',
@@ -174,7 +174,10 @@ HTML;
         $true_field_params = array(
             'type' => 'radio',
             'id'   => 'Content-watch_status',
-            'vals' => array('off' => 'Не проверять автоматически', 'on' => 'Проверять посты при добавлении и правке')
+            'vals' => array(
+                'on' => 'Проверять посты при добавлении и правке',
+                'off' => 'Не проверять автоматически',
+            )
         );
         add_settings_field(
             'Content-watch_status',
@@ -203,7 +206,7 @@ HTML;
      */
     public function add_column($columns)
     {
-        $columns['sarlab_column'] = 'Content-watch';
+        $columns['cw_column'] = 'Content-watch';
         return $columns;
     }
 
@@ -213,17 +216,17 @@ HTML;
      */
     public function fill_column($column_name, $post_id)
     {
-        if ($column_name != 'sarlab_column') {
+        if ($column_name != 'cw_column') {
             return;
         }
 
-        echo '<span class="sarlab_column_value">';
+        echo '<span class="cw_column_value">';
         $post = get_post($post_id, "OBJECT");
         $timestamp = strtotime($post->post_modified);
 
         if ($timestamp <= get_post_meta($post_id, 'content-watch-date', 1)) {
             echo get_post_meta($post_id, 'content-watch', 1)
-                . "<br/>Последняя проверка: "
+                . "<br/>проверен "
                 . date("d.m.Y", get_post_meta($post_id, 'content-watch-date', 1));
         } else if (get_post_meta($post_id, 'content-watch-check', 1) == "check") {
             echo "Идет проверка";
@@ -231,7 +234,7 @@ HTML;
             echo "Еще не проверен";
         }
 
-        echo '</span><br/><span class="sarlab_check" data-id="' . $post_id . '">Проверить</span>';
+        echo '</span><br/><span class="cw_check" data-id="' . $post_id . '">Проверить</span>';
     }
 
     public function check_balance()
@@ -251,15 +254,18 @@ HTML;
     public function metaBoxGetPrintCheckResults()
     {
         global $post;
-        // Используем nonce для верификации
         wp_nonce_field(plugin_basename(__FILE__), 'boom_noncename');
 
         if (get_post_meta($post->ID, "content-watch-check", 1) == "check") {
-            echo '<div class="sarlab_for_check">Текст отправлен на проверку уникальности<br/><span class="button sarlab_check_cron" data-id="'.$post->ID.'">Получить результат без перезагрузки страницы</span></div><div id="sarlab_result"></div>';
+            echo '<div class="cw_for_check">
+                    Текст отправлен на проверку уникальности<br/>
+                    <span class="button cw_check_cron" data-id="'.$post->ID.'">
+                    Получить результат без перезагрузки страницы</span>
+                </div><div id="cw_result"></div>';
         } else {
-            // Поля формы для введения данных
-            echo '<span class="button sarlab_check" data-id="'.$post->ID.'">Проверить текст</span>
-                <div class="sarlab_column_value">'.get_post_meta($post->ID, 'content-watch', 1);
+            echo '<span class="button cw_check" data-id="'.$post->ID.'">Проверить текст</span>
+                <div class="cw_column_value">'
+                . '<p class="cw_result">' . get_post_meta($post->ID, 'content-watch', 1) . '</p>';
             echo $this->getPostMatchesHTML($post->ID);
             echo '</div>';
         }
@@ -272,8 +278,8 @@ HTML;
             echo 'error';
         } else {
             // Поля формы для введения данных
-            echo '<span class="button sarlab_check" data-id="'.$post_id.'">Проверить текст</span>
-                <div class="sarlab_column_value">'
+            echo '<span class="button cw_check" data-id="'.$post_id.'">Проверить текст</span>
+                <div class="cw_column_value">'
                 . get_post_meta($post_id, 'content-watch', 1);
 
 
@@ -303,13 +309,14 @@ HTML;
         $return = '';
 
         if (isset($matches[0]["url"])) {
-            $return .= "<table><tr><th>Сайт</th><th>Процент</th></tr>";
+            $return .= "<table class='cw_results_table'><tr><th>Адрес страницы</th><th>Совпадений</th></tr>";
 
             foreach($matches as $match) {
-                $return .= "<tr>
-                            <td><a href='" . $match["url"] . "' target='_blank'>" . $match["url"] . "</a></td>
-                            <td>" . $match["percent"] . "</td>
-                        </tr>";
+                $return .= "
+                    <tr>
+                        <td><a href='" . $match["url"] . "' target='_blank'>" . urldecode($match["url"]) . "</a></td>
+                        <td>" . $match["percent"] . "%</td>
+                    </tr>";
             }
 
             $return .= "</table>";
@@ -322,7 +329,7 @@ HTML;
     {
         $postId = intval($_POST['post_id']);
         $this->checkPost($_POST['post_id']);
-        echo get_post_meta($postId, 'content-watch', 1);
+        echo '<p class="cw_result">' . get_post_meta($postId, 'content-watch', 1) . '</p>';
         wp_die();
     }
 
@@ -330,7 +337,7 @@ HTML;
     {
         $postId = intval($_POST['post_id']);
         $this->checkPost($postId, $_POST['text']);
-        echo get_post_meta($postId, 'content-watch', 1)
+        echo '<p class="cw_result">' . get_post_meta($postId, 'content-watch', 1) . '</p>'
             . $this->getPostMatchesHTML($postId);
         wp_die();
     }
@@ -357,8 +364,8 @@ HTML;
             $text_done = 'Ошибка проверки: ' . $return['error'];
             update_post_meta($postId, "content-watch-json", json_encode(array()));
         } else {
-            $text_done = "Уникальность: " . $return["percent"] . "%";
-            update_post_meta($postId, "content-watch-json", json_encode($return["matches"]));
+            $text_done = "Уникальность текста: " . $return["percent"] . "%";
+            update_post_meta($postId, "content-watch-json", wp_slash(json_encode($return["matches"])));
         }
 
         $timestamp = time() + get_option('gmt_offset') * 3600;
@@ -419,14 +426,30 @@ HTML;
     {
         echo <<<HTML
             <style type='text/css'>
-                .sarlab_column {
-                    line-height: 2.2em;
-                    padding-right: 15px;
-                }
-                .sarlab_check {
+                .cw_check {
                     color: blue;
                     font-weight: bold;
                     cursor: pointer;
+                }
+                .button.cw_orange, .button.cw_orange:hover, .button.cw_orange:active {
+                    background-color: #f26739;
+                    color: white;
+                }
+                .cw_result {
+                    font-size: 18px;
+                    margin: 15px 0 7px 7px;
+                }
+                .cw_results_table th {
+                    font-size: 14px;
+                    padding: 5px;
+                    text-align: left;
+                }
+                .cw_results_table td {
+                    font-size: 16px;
+                    padding: 5px;
+                }
+                .cw_results_table td:first-child {
+                    font-size: 14px;
                 }
             </style>
 HTML;
@@ -436,19 +459,19 @@ HTML;
         echo <<<HTML
         <script type="text/javascript">
         jQuery(document).ready(function($) {
-            jQuery(".sarlab_column .sarlab_check").bind("click",function(){
+            jQuery(".cw_check").bind("click",function(){
                 var post_id = jQuery(this).data("id");
                 var data = {
                     action: "check_post_by_id",
                     post_id: post_id
                 };
-                jQuery("#post-"+post_id+" .sarlab_column_value").html("Идет проверка");
+                jQuery("#post-"+post_id+" .cw_column_value").html("Идет проверка");
                 jQuery.post( ajaxurl, data, function(response) {
-                    jQuery("#post-"+post_id+" .sarlab_column_value").html(response);
+                    jQuery("#post-"+post_id+" .cw_column_value").html(response);
                     console.log("Ответ сервера: " + response);
                 });
             });
-            jQuery("#boom_sectionid_box .sarlab_check").bind("click",function(){
+            jQuery("#boom_sectionid_box .cw_check").bind("click",function(){
                 var post_id = jQuery(this).data("id");
                 var text = jQuery("textarea#content").val();
                 var data = {
@@ -456,37 +479,36 @@ HTML;
                     text: text,
                     post_id: post_id
                 };
-                jQuery("#boom_sectionid_box .sarlab_column_value").html("Идет проверка");
+                jQuery("#boom_sectionid_box .cw_column_value").html("Идет проверка");
                 jQuery.post( ajaxurl, data, function(response) {
-                    jQuery("#boom_sectionid_box .sarlab_column_value").html(response);
+                    jQuery("#boom_sectionid_box .cw_column_value").html(response);
                     console.log("Ответ сервера: " + response);
                 });
             });
-            jQuery("#button_sarlab_balance").bind("click",function(){
+            jQuery("#button_cw_balance").bind("click",function(){
                 var key = jQuery(this).data("id");
                 var data = {
                     action: "cw_check_balance",
                     key: key
                 };
-                jQuery("#sarlab_balance").val("Идет запрос");
+                jQuery("#cw_balance").val("Идет запрос");
                 jQuery.post( ajaxurl, data, function(response) {
-                    jQuery("#sarlab_balance").val(response);
-                    console.log("Ответ сервера: " + response);
+                    jQuery("#cw_balance").text(response);
                 });
             });
-            jQuery(".sarlab_check_cron").bind("click",function(){
+            jQuery(".cw_check_cron").bind("click",function(){
                 var post_id = jQuery(this).data("id");
                 var data = {
                     action: "boom_meta_box_get_check_results",
                     post_id: post_id
                 };
-                jQuery("#sarlab_result").html("Идет запрос");
+                jQuery("#cw_result").html("Идет запрос");
                 jQuery.post( ajaxurl, data, function(response) {
                     if(response=="error") {
-                        jQuery("#sarlab_result").html("Результат проверки не готов");
+                        jQuery("#cw_result").html("Результат проверки не готов");
                     } else {
-                        jQuery(".sarlab_for_check").remove();
-                        jQuery("#sarlab_result").html(response);
+                        jQuery(".cw_for_check").remove();
+                        jQuery("#cw_result").html(response);
                         }
                     console.log("Ответ сервера: " + response);
                 });
