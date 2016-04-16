@@ -247,7 +247,7 @@ HTML;
     {
         $screens = array('post','page');
         foreach ($screens as $screen) {
-            add_meta_box('boom_sectionid_box', 'Content-watch', array($this, 'metaBoxGetPrintCheckResults'), $screen, 'normal', 'high');
+            add_meta_box('cw_plagiat_box', 'Content-watch', array($this, 'metaBoxGetPrintCheckResults'), $screen, 'normal', 'high');
         }
     }
 
@@ -256,9 +256,9 @@ HTML;
         global $post;
         wp_nonce_field(plugin_basename(__FILE__), 'boom_noncename');
 
-        if (get_post_meta($post->ID, "content-watch-check", 1) == "check") {
+        if (!$this->isNewPost() && get_post_meta($post->ID, "content-watch-check", 1) == "check") {
             echo '<div class="cw_for_check">
-                    Текст отправлен на проверку уникальности<br/>
+                    Идет проверка уникальности<br/>
                     <span class="button cw_check_cron" data-id="'.$post->ID.'">
                     Получить результат без перезагрузки страницы</span>
                 </div><div id="cw_result"></div>';
@@ -271,6 +271,15 @@ HTML;
         }
     }
 
+    /**
+     * @return bool
+     */
+    protected function isNewPost()
+    {
+        $screen = get_current_screen();
+        return $screen->action === 'add' && $screen->base ==='post';
+    }
+
     public function metaBoxGetCheckResults()
     {
         $post_id = $_POST['post_id'];
@@ -280,7 +289,7 @@ HTML;
             // Поля формы для введения данных
             echo '<span class="button cw_check" data-id="'.$post_id.'">Проверить текст</span>
                 <div class="cw_column_value">'
-                . get_post_meta($post_id, 'content-watch', 1);
+                . '<p class="cw_result">' . get_post_meta($post_id, 'content-watch', 1) . '</p>';
 
 
             echo $this->getPostMatchesHTML($post_id);
@@ -329,7 +338,7 @@ HTML;
     {
         $postId = intval($_POST['post_id']);
         $this->checkPost($_POST['post_id']);
-        echo '<p class="cw_result">' . get_post_meta($postId, 'content-watch', 1) . '</p>';
+        echo get_post_meta($postId, 'content-watch', 1);
         wp_die();
     }
 
@@ -355,6 +364,7 @@ HTML;
             $post = get_post($postId);
             $text = $post->post_content;
         }
+        update_post_meta($postId, "content-watch-check", "check");
         $return = $this->queryAPI(array('text' => $text));
 
         if (!isset($return['error'])) {
@@ -364,7 +374,7 @@ HTML;
             $text_done = 'Ошибка проверки: ' . $return['error'];
             update_post_meta($postId, "content-watch-json", json_encode(array()));
         } else {
-            $text_done = "Уникальность текста: " . $return["percent"] . "%";
+            $text_done = "Уникальность: " . $return["percent"] . "%";
             update_post_meta($postId, "content-watch-json", wp_slash(json_encode($return["matches"])));
         }
 
@@ -380,6 +390,9 @@ HTML;
      */
     public function onPostSave($post_ID)
     {
+        if (wp_is_post_revision($post_ID) || wp_is_post_autosave($post_ID)) {
+            return;
+        }
         update_post_meta($post_ID, "content-watch-check", "check");
         wp_schedule_single_event(time() + 1, 'cw_scheduled_check', array($post_ID));
     }
@@ -458,20 +471,12 @@ HTML;
     public function content_watch_plugin_adminjs() {
         echo <<<HTML
         <script type="text/javascript">
-        jQuery(document).ready(function($) {
-            jQuery(".cw_check").bind("click",function(){
-                var post_id = jQuery(this).data("id");
-                var data = {
-                    action: "check_post_by_id",
-                    post_id: post_id
-                };
-                jQuery("#post-"+post_id+" .cw_column_value").html("Идет проверка");
-                jQuery.post( ajaxurl, data, function(response) {
-                    jQuery("#post-"+post_id+" .cw_column_value").html(response);
-                    console.log("Ответ сервера: " + response);
-                });
-            });
-            jQuery("#boom_sectionid_box .cw_check").bind("click",function(){
+        function cwBindCheckClick() {
+            // check from within post details box
+            jQuery("#cw_plagiat_box .cw_check").bind("click",function(){
+                if (typeof tinymce != 'undefined') {
+                    tinymce.triggerSave();
+                }
                 var post_id = jQuery(this).data("id");
                 var text = jQuery("textarea#content").val();
                 var data = {
@@ -479,38 +484,62 @@ HTML;
                     text: text,
                     post_id: post_id
                 };
-                jQuery("#boom_sectionid_box .cw_column_value").html("Идет проверка");
+
+                jQuery("#cw_plagiat_box .cw_column_value").html("<p>Идет проверка уникальности</p>");
                 jQuery.post( ajaxurl, data, function(response) {
-                    jQuery("#boom_sectionid_box .cw_column_value").html(response);
-                    console.log("Ответ сервера: " + response);
+                    jQuery("#cw_plagiat_box .cw_column_value").html(response);
                 });
             });
+        }
+
+        jQuery(document).ready(function($) {
+            // check from within posts list
+            jQuery(".column-cw_column .cw_check").bind("click",function(){
+                var post_id = jQuery(this).data("id");
+                var data = {
+                    action: "check_post_by_id",
+                    post_id: post_id
+                };
+
+                jQuery("#post-"+post_id+" .cw_column_value").html("Идет проверка...");
+                jQuery.post(ajaxurl, data, function(response) {
+                    jQuery("#post-"+post_id+" .cw_column_value").html(response);
+                });
+            });
+
+            cwBindCheckClick();
+
+            // balance refresh request
             jQuery("#button_cw_balance").bind("click",function(){
                 var key = jQuery(this).data("id");
                 var data = {
                     action: "cw_check_balance",
                     key: key
                 };
+
                 jQuery("#cw_balance").val("Идет запрос");
                 jQuery.post( ajaxurl, data, function(response) {
                     jQuery("#cw_balance").text(response);
                 });
             });
+
+            // manual results request when opening check-in-progress post
             jQuery(".cw_check_cron").bind("click",function(){
                 var post_id = jQuery(this).data("id");
                 var data = {
                     action: "boom_meta_box_get_check_results",
                     post_id: post_id
                 };
+
                 jQuery("#cw_result").html("Идет запрос");
                 jQuery.post( ajaxurl, data, function(response) {
-                    if(response=="error") {
+                    if (response=="error") {
                         jQuery("#cw_result").html("Результат проверки не готов");
                     } else {
                         jQuery(".cw_for_check").remove();
                         jQuery("#cw_result").html(response);
-                        }
-                    console.log("Ответ сервера: " + response);
+                        cwBindCheckClick();
+                    }
                 });
             });
         });
