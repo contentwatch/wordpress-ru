@@ -15,7 +15,7 @@ $plugin->init();
  */
 class ContentWatchPlugin
 {
-    protected $true_page = 'api-content-watch.php';
+    protected $pageName = 'api-content-watch.php';
     protected $settingsGroup = 'content_watch_plugin_settings';
 
     public function init()
@@ -25,8 +25,7 @@ class ContentWatchPlugin
         add_action('admin_menu', array($this, 'plugin_options'));
         add_action('admin_init', array($this, 'register_settings'));
 
-        $options = get_option($this->settingsGroup);
-        if ($options["Content-watch_status"] == "on") {
+        if ($this->getOption('Content-watch_status') == "on") {
             add_filter('save_post', array($this, 'onPostSave'));
             add_filter('publush_post', array($this, 'onPostSave'));
         }
@@ -54,12 +53,28 @@ class ContentWatchPlugin
         add_action('cw_scheduled_check', array($this, 'checkPost'), 10, 3);
     }
 
+    /**
+     * @param string $name
+     * @return null
+     */
+    protected function getOption($name)
+    {
+        $options = get_option($this->settingsGroup);
+        $fullOptionName = $name;
+
+        if (empty($options) || !is_array($options)) {
+            return null;
+        }
+
+        return $options[$fullOptionName];
+    }
+
     public function plugin_options() {
         add_options_page(
             'Настройка Api_Content-watch',
             'Настройка Content-watch',
             'manage_options',
-            $this->true_page,
+            $this->pageName,
             array($this, 'plugin_options_page')
         );
     }
@@ -76,41 +91,44 @@ class ContentWatchPlugin
                 ваших постов на уникальность при добавлении и правке.</p>
             <p>Для проверки используется API сервиса
                 <a href="https://content-watch.ru/api/" target="_blank">https://content-watch.ru/api/</a></p>
+HTML;
 
-            <h2>Начало работы</h2>
+        $stepsHtml = <<<HTML
             <p>1. Зарегистрируйтесь на сайте
                 <a href="https://content-watch.ru/login/register/" target="_blank">content-watch.ru</a></p>
             <p>2. Подключите API на странице
                 <a href="https://content-watch.ru/api/" target="_blank">content-watch.ru/api/</a></p>
-            <p>3. Введите ваш уникальный API-ключ ниже в настройках
-                <a href="https://content-watch.ru/api/" target="_blank">content-watch.ru/api/</a></p>
+            <p>3. Введите ваш уникальный API-ключ ниже в настройках</p>
             <p>4. При добавлении и правке постов их текст будет автоматически проверяться на уникальность!</p>
 
-            <h2>Настройки</h2>
             <form method="post" enctype="multipart/form-data" action="options.php">
 HTML;
-        echo settings_fields($this->settingsGroup);
-        echo do_settings_sections($this->true_page);
-        $options = get_option($this->settingsGroup);
 
-        echo <<<HTML
-                <p class="submit">
-                    <input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
-                </p>
-            </form>
-        <button class="button" id="button_sarlab_balance"
-            data-id="{$options["Content-watch_api_key"]}">
-            Проверить баланс
-        </button>
-HTML;
-
-        echo <<<HTML
-            <input id="sarlab_balance" value="Денег на счету: {$this->getBalanceFromAPI()}"
-                disabled="disabled"><br/>
-            <a class="button" href="http://content-watch.ru/pay/#api" target="_blank">
-                Пополнить баланс</a>
+        $key = $this->getOption('Content-watch_api_key');
+        if ($this->getOption('Content-watch_api_key')) {
+            echo <<<HTML
+            <h2>Ваш аккаунт</h2>
+            <p><strong>Денег на счету: {$this->getBalanceFromAPI()}</strong></p>
+            <p><button class="button" id="button_sarlab_balance" data-id="{$key}">Проверить баланс</button></p>
+            <p><a class="button" href="http://content-watch.ru/pay/#api" target="_blank">Пополнить баланс</a></p>
         </div>
 HTML;
+        } else {
+            echo '<h2>Начало работы</h2>' . $stepsHtml;
+        }
+
+        echo settings_fields($this->settingsGroup);
+        echo do_settings_sections($this->pageName);
+        echo <<<HTML
+                <p class="submit">
+                    <input type="submit" class="button-primary" value="Сохранить настройки" />
+                </p>
+            </form>
+HTML;
+
+        if ($this->getOption('Content-watch_api_key')) {
+            echo '<h2>Схема работы</h2>' . $stepsHtml;
+        }
     }
 
     /*
@@ -121,15 +139,15 @@ HTML;
         register_setting(
             $this->settingsGroup,
             $this->settingsGroup,
-            'true_validate_settings'
+            array($this, 'true_validate_settings')
         );
 
         // Добавляем секцию
         add_settings_section(
-            'sarlab_section_1',
-            'Настройки плагина Content-watch',
+            'cw_section',
+            'Настройки',
             '',
-            $this->true_page
+            $this->pageName
         );
 
         $desc = '* обязательно подключите API на странице
@@ -146,24 +164,24 @@ HTML;
 
         add_settings_field(
             'my_text_field',
-            'API key',
+            'Ваш API ключ',
             array($this, 'display_input_field'),
-            $this->true_page,
-            'sarlab_section_1',
+            $this->pageName,
+            'cw_section',
             $true_field_params
         );
 
         $true_field_params = array(
             'type' => 'radio',
             'id'   => 'Content-watch_status',
-            'vals' => array('off' => 'Не проверять на уникальность', 'on' => 'Проверять на уникальность')
+            'vals' => array('off' => 'Не проверять автоматически', 'on' => 'Проверять посты при добавлении и правке')
         );
         add_settings_field(
             'Content-watch_status',
-            'Состояние проверок',
+            'Статус плагина',
             array($this, 'display_input_field'),
-            $this->true_page,
-            'sarlab_section_1',
+            $this->pageName,
+            'cw_section',
             $true_field_params
         );
     }
@@ -382,9 +400,8 @@ HTML;
      */
     protected function queryAPI(array $params)
     {
-        $options = get_option($this->settingsGroup);
         $params += array(
-            'key' => $options["Content-watch_api_key"],
+            'key' => $this->getOption('Content-watch_api_key'),
         );
 
         $curl = curl_init();
@@ -486,47 +503,52 @@ HTML;
     public function display_input_field($args) {
         extract( $args );
 
-        $option_name = $this->settingsGroup;
-
-        $o = get_option($option_name);
-
         /**
          * @var string $type
          * @var string $desc
          * @var int $id
          * @var array $vals
          */
+        $option = $this->getOption($id);
         switch ( $type ) {
             case 'text':
-                $o[$id] = esc_attr( stripslashes($o[$id]) );
-                echo "<input class='regular-text' type='text' id='$id' required='required' name='" . $option_name . "[$id]' value='$o[$id]' />";
-                echo ($desc != '') ? "<br /><span class='description'>$desc</span>" : "";
+                echo sprintf(
+                    "<input class='regular-text' type='text' id='%s' required='required' name='%s[%s]' value='%s' />", $id, $this->settingsGroup, $id, esc_attr(stripslashes($option))
+                );
+                echo $desc ? "<br /><span class='description'>$desc</span>" : "";
                 break;
             case 'textarea':
-                $o[$id] = esc_attr( stripslashes($o[$id]) );
-                echo "<textarea class='code large-text' cols='50' rows='10' type='text' id='$id' name='" . $option_name . "[$id]'>$o[$id]</textarea>";
-                echo ($desc != '') ? "<br /><span class='description'>$desc</span>" : "";
+                echo sprintf(
+                    "<textarea class='code large-text' cols='50' rows='10' type='text' id='%s' name='%s[%s]'>%s</textarea>", $id, $this->settingsGroup, $id, esc_attr(stripslashes($option))
+                );
+                echo $desc ? "<br /><span class='description'>$desc</span>" : "";
                 break;
             case 'checkbox':
-                $checked = ($o[$id] == 'on') ? " checked='checked'" :  '';
-                echo "<label><input type='checkbox' id='$id' name='" . $option_name . "[$id]' $checked /> ";
-                echo ($desc != '') ? $desc : "";
+                $checked = ($option == 'on') ? " checked='checked'" :  '';
+                echo sprintf(
+                    "<label><input type='checkbox' id='%s' name='%s[%s]' %s /> ", $id, $this->settingsGroup, $id, $checked
+                );
+                echo $desc ? $desc : "";
                 echo "</label>";
                 break;
             case 'select':
-                echo "<select id='$id' name='" . $option_name . "[$id]'>";
-                foreach($vals as $v=>$l){
-                    $selected = ($o[$id] == $v) ? "selected='selected'" : '';
+                echo sprintf(
+                    "<select id='%s' name='%s[%s]'>", $id, $this->settingsGroup, $id
+                );
+                foreach($vals as $v => $l){
+                    $selected = ($option == $v) ? "selected='selected'" : '';
                     echo "<option value='$v' $selected>$l</option>";
                 }
-                echo ($desc != '') ? $desc : "";
+                echo $desc ? $desc : "";
                 echo "</select>";
                 break;
             case 'radio':
                 echo "<fieldset>";
                 foreach($vals as $v=>$l){
-                    $checked = ($o[$id] == $v||!$o[$id]) ? "checked='checked'" : '';
-                    echo "<label><input type='radio' name='" . $option_name . "[$id]' value='$v' $checked />$l</label><br />";
+                    $checked = ($option == $v || !$option) ? "checked='checked'" : '';
+                    echo sprintf(
+                        "<label><input type='radio' name='%s[%s]' value='%s' %s />%s</label><br />", $this->settingsGroup, $id, $v, $checked, $l
+                    );
                 }
                 echo "</fieldset>";
                 break;
