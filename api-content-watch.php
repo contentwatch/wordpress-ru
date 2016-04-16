@@ -70,10 +70,22 @@ class ContentWatchPlugin
     {
         echo <<<HTML
         <div class="wrap">
-            <h2>Api Content-watch</h2>
-            <p>Плагин позволяет интегрировать автоматическую проверку уникальности
-            вашего контента сервисом <a href="https://content-watch.ru/" target="_blank">
-            https://content-watch.ru</a></p>
+            <h2>API проверки на уникальность Content-watch</h2>
+            <p>Плагин позволяет автоматически проверять текст
+                ваших постов на уникальность при добавлении и правке.</p>
+            <p>Для проверки используется API сервиса
+                <a href="https://content-watch.ru/api/" target="_blank">https://content-watch.ru/api/</a></p>
+
+            <h2>Начало работы</h2>
+            <p>1. Зарегистрируйтесь на сайте
+                <a href="https://content-watch.ru/login/register/" target="_blank">content-watch.ru</a></p>
+            <p>2. Подключите API на странице
+                <a href="https://content-watch.ru/api/" target="_blank">content-watch.ru/api/</a></p>
+            <p>3. Введите ваш уникальный API-ключ ниже в настройках
+                <a href="https://content-watch.ru/api/" target="_blank">content-watch.ru/api/</a></p>
+            <p>4. При добавлении и правке постов их текст будет автоматически проверяться на уникальность!</p>
+
+            <h2>Настройки</h2>
             <form method="post" enctype="multipart/form-data" action="options.php">
 HTML;
         echo settings_fields($this->settingsGroup);
@@ -155,60 +167,6 @@ HTML;
     }
 
     /*
-     * Функция отображения полей ввода
-     * Здесь задаётся HTML и PHP, выводящий поля
-     */
-    public function display_input_field($args) {
-        extract( $args );
-
-        $option_name = $this->settingsGroup;
-
-        $o = get_option($option_name);
-
-        /**
-         * @var string $type
-         * @var string $desc
-         * @var int $id
-         * @var array $vals
-         */
-        switch ( $type ) {
-            case 'text':
-                $o[$id] = esc_attr( stripslashes($o[$id]) );
-                echo "<input class='regular-text' type='text' id='$id' required='required' name='" . $option_name . "[$id]' value='$o[$id]' />";
-                echo ($desc != '') ? "<br /><span class='description'>$desc</span>" : "";
-                break;
-            case 'textarea':
-                $o[$id] = esc_attr( stripslashes($o[$id]) );
-                echo "<textarea class='code large-text' cols='50' rows='10' type='text' id='$id' name='" . $option_name . "[$id]'>$o[$id]</textarea>";
-                echo ($desc != '') ? "<br /><span class='description'>$desc</span>" : "";
-                break;
-            case 'checkbox':
-                $checked = ($o[$id] == 'on') ? " checked='checked'" :  '';
-                echo "<label><input type='checkbox' id='$id' name='" . $option_name . "[$id]' $checked /> ";
-                echo ($desc != '') ? $desc : "";
-                echo "</label>";
-                break;
-            case 'select':
-                echo "<select id='$id' name='" . $option_name . "[$id]'>";
-                foreach($vals as $v=>$l){
-                    $selected = ($o[$id] == $v) ? "selected='selected'" : '';
-                    echo "<option value='$v' $selected>$l</option>";
-                }
-                echo ($desc != '') ? $desc : "";
-                echo "</select>";
-                break;
-            case 'radio':
-                echo "<fieldset>";
-                foreach($vals as $v=>$l){
-                    $checked = ($o[$id] == $v||!$o[$id]) ? "checked='checked'" : '';
-                    echo "<label><input type='radio' name='" . $option_name . "[$id]' value='$v' $checked />$l</label><br />";
-                }
-                echo "</fieldset>";
-                break;
-        }
-    }
-
-    /*
      * Функция проверки правильности вводимых полей
      */
     public function true_validate_settings($input)
@@ -256,9 +214,6 @@ HTML;
         echo '</span><br/><span class="sarlab_check" data-id="' . $post_id . '">Проверить</span>';
     }
 
-    /**
-     * Using wp_die() to avoid any output
-     */
     public function check_balance()
     {
         echo "Денег на счету: " . $this->getBalanceFromAPI();
@@ -360,6 +315,11 @@ HTML;
         wp_die();
     }
 
+    /**
+     * @param $postId
+     * @param null $text
+     * @return bool
+     */
     public function checkPost($postId, $text = null)
     {
         $postId = intval($postId);
@@ -388,10 +348,51 @@ HTML;
         return true;
     }
 
+    /**
+     * @param $post_ID
+     */
     public function onPostSave($post_ID)
     {
         update_post_meta($post_ID, "content-watch-check", "check");
         wp_schedule_single_event(time() + 1, 'cw_scheduled_check', array($post_ID));
+    }
+
+    /**
+     * @return string
+     */
+    protected function getBalanceFromAPI()
+    {
+        $params = array(
+            'action' => 'GET_BALANCE',
+        );
+        $response = $this->queryAPI($params);
+
+        if (!empty($response['error'])) {
+            return 'ошибка (' . $response['error'] . ')';
+        }
+
+        return $response["balance"] . ' руб.';
+    }
+
+    /**
+     * @param array $params
+     * @return array
+     */
+    protected function queryAPI(array $params)
+    {
+        $params += array(
+            'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
+        );
+
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_POST, true);
+        curl_setopt($curl, CURLOPT_POSTFIELDS, $params);
+        curl_setopt($curl, CURLOPT_URL, 'https://content-watch.ru/public/api/');
+        $response = json_decode(trim(curl_exec($curl)), true);
+        curl_close($curl);
+
+        return $response;
     }
 
     public function content_watch_plugin_admincss()
@@ -475,41 +476,57 @@ HTML;
 HTML;
     }
 
-    /**
-     * @return string
+    /*
+     * Функция отображения полей ввода
+     * Здесь задаётся HTML и PHP, выводящий поля
      */
-    protected function getBalanceFromAPI()
-    {
-        $params = array(
-            'action' => 'GET_BALANCE',
-        );
-        $response = $this->queryAPI($params);
+    public function display_input_field($args) {
+        extract( $args );
 
-        if (!empty($response['error'])) {
-            return 'ошибка (' . $response['error'] . ')';
+        $option_name = $this->settingsGroup;
+
+        $o = get_option($option_name);
+
+        /**
+         * @var string $type
+         * @var string $desc
+         * @var int $id
+         * @var array $vals
+         */
+        switch ( $type ) {
+            case 'text':
+                $o[$id] = esc_attr( stripslashes($o[$id]) );
+                echo "<input class='regular-text' type='text' id='$id' required='required' name='" . $option_name . "[$id]' value='$o[$id]' />";
+                echo ($desc != '') ? "<br /><span class='description'>$desc</span>" : "";
+                break;
+            case 'textarea':
+                $o[$id] = esc_attr( stripslashes($o[$id]) );
+                echo "<textarea class='code large-text' cols='50' rows='10' type='text' id='$id' name='" . $option_name . "[$id]'>$o[$id]</textarea>";
+                echo ($desc != '') ? "<br /><span class='description'>$desc</span>" : "";
+                break;
+            case 'checkbox':
+                $checked = ($o[$id] == 'on') ? " checked='checked'" :  '';
+                echo "<label><input type='checkbox' id='$id' name='" . $option_name . "[$id]' $checked /> ";
+                echo ($desc != '') ? $desc : "";
+                echo "</label>";
+                break;
+            case 'select':
+                echo "<select id='$id' name='" . $option_name . "[$id]'>";
+                foreach($vals as $v=>$l){
+                    $selected = ($o[$id] == $v) ? "selected='selected'" : '';
+                    echo "<option value='$v' $selected>$l</option>";
+                }
+                echo ($desc != '') ? $desc : "";
+                echo "</select>";
+                break;
+            case 'radio':
+                echo "<fieldset>";
+                foreach($vals as $v=>$l){
+                    $checked = ($o[$id] == $v||!$o[$id]) ? "checked='checked'" : '';
+                    echo "<label><input type='radio' name='" . $option_name . "[$id]' value='$v' $checked />$l</label><br />";
+                }
+                echo "</fieldset>";
+                break;
         }
-
-        return $response["balance"] . ' руб.';
-    }
-
-    /**
-     * @param array $params
-     * @return array
-     */
-    protected function queryAPI(array $params)
-    {
-        $params += array(
-            'key' => get_option($this->settingsGroup)["Content-watch_api_key"],
-        );
-
-        $curl = curl_init();
-        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($curl, CURLOPT_POST, true);
-        curl_setopt($curl, CURLOPT_POSTFIELDS, $params);
-        curl_setopt($curl, CURLOPT_URL, 'https://content-watch.ru/public/api/');
-        $response = json_decode(trim(curl_exec($curl)), true);
-        curl_close($curl);
-
-        return $response;
     }
 }
