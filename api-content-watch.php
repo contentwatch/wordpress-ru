@@ -365,7 +365,7 @@ HTML;
             $text = $post->post_content;
         }
         update_post_meta($postId, "content-watch-check", "check");
-        $return = $this->queryAPI(array('text' => $text));
+        $return = $this->queryAPI(array('text' => $text, 'ignore' => get_permalink($postId)));
 
         if (!isset($return['error'])) {
             $text_done = 'Ошибка запроса на проверку уникальности';
@@ -422,6 +422,7 @@ HTML;
     {
         $params += array(
             'key' => $this->getOption('Content-watch_api_key'),
+            'source' => 'cwwp',
         );
 
         $curl = curl_init();
