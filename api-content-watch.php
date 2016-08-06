@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content-Watch.ru API
 Author: Content Watch
-Version: 1.0
+Version: 1.1
 Description: Плагин для проверки уникальности контента
 Author URI: https://content-watch.ru/api/
 */
@@ -100,8 +100,6 @@ HTML;
                 <a href="https://content-watch.ru/api/" target="_blank">content-watch.ru/api/</a></p>
             <p>3. Введите ваш уникальный API-ключ ниже в настройках</p>
             <p>4. При добавлении и правке постов их текст будет автоматически проверяться на уникальность!</p>
-
-            <form method="post" enctype="multipart/form-data" action="options.php">
 HTML;
 
         $key = $this->getOption('Content-watch_api_key');
@@ -119,6 +117,7 @@ HTML;
             echo '<h2>Начало работы</h2>' . $stepsHtml;
         }
 
+        echo '<form method="post" enctype="multipart/form-data" action="options.php">';
         echo settings_fields($this->settingsGroup);
         echo do_settings_sections($this->pageName);
         echo <<<HTML
