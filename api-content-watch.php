@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content-Watch.ru API
 Author: Content Watch
-Version: 1.1
+Version: 1.2
 Description: Плагин для проверки уникальности контента
 Author URI: https://content-watch.ru/api/
 */
@@ -708,8 +708,8 @@ HTML;
 }
 add_filter( 'parse_query', 'admin_posts_filter' );
 add_action( 'restrict_manage_posts', 'admin_posts_filter_restrict_manage_posts' );
-add_action( 'save_post', 'my_project_updated_send_email' );
-function my_project_updated_send_email( $postId ) {
+add_action( 'save_post', 'add_content_prcnt' );
+function add_content_prcnt( $postId ) {
     delete_post_meta($postId, "content-prcnt");
 }
  
