@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content-Watch.ru API
 Author: Content Watch
-Version: 1.1
+Version: 1.2
 Description: Плагин для проверки уникальности контента
 Author URI: https://content-watch.ru/api/
 */
@@ -13,6 +13,44 @@ $plugin->init();
 /**
  * Class ContentWatchPlugin
  */
+ 
+register_activation_hook( __FILE__, 'plugin_activate_acw_wla' );
+
+register_uninstall_hook(__FILE__, 'plugin_deactivate_acw_wla');
+
+function plugin_deactivate_acw_wla() {
+    global $wpdb;
+    $table_name = $wpdb->get_blog_prefix().'acw_wla';
+    $sql = "DROP TABLE IF EXISTS $table_name";
+    $wpdb->query($sql);
+}
+
+function plugin_activate_acw_wla(){
+	global $wpdb;
+    $table_name = $wpdb->get_blog_prefix().'acw_wla';
+    $query = $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ));
+    if ( ! $wpdb->get_var( $query ) == $table_name ) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    	$charset_collate = $wpdb->get_charset_collate();
+    	$sql = "CREATE TABLE {$table_name} (
+    	a1 varchar(255),
+    	b1 varchar(255),
+    	c1 varchar(255)
+    	)
+    	{$charset_collate};";
+    	dbDelta($sql);
+        $wpdb->insert($table_name,  array("a1" => "0-30", "b1" => "31-85", "c1" => "86-100"));
+    }
+}
+ 
+ 
+if (isset($_POST['medium_s'])) {
+    global $wpdb;
+    $table_name = $wpdb->get_blog_prefix().'acw_wla';
+    $wpdb->query("UPDATE ".$table_name." SET `a1` = '".$_POST['low_s']."', `b1` = '".$_POST['medium_s']."', `c1` = '".$_POST['high_s']."'");
+}
+
+
 class ContentWatchPlugin
 {
     protected $pageName = 'api-content-watch.php';
@@ -65,7 +103,6 @@ class ContentWatchPlugin
         if (empty($options) || !is_array($options)) {
             return null;
         }
-
         return $options[$fullOptionName];
     }
 
@@ -116,15 +153,78 @@ HTML;
         } else {
             echo '<h2>Начало работы</h2>' . $stepsHtml;
         }
-
-        echo '<form method="post" enctype="multipart/form-data" action="options.php">';
-        echo settings_fields($this->settingsGroup);
-        echo do_settings_sections($this->pageName);
+        
+        global $wpdb;
+        $pref = $wpdb->get_blog_prefix().'acw_wla';
+        $db = $wpdb->get_row("SELECT * FROM $pref");
         echo <<<HTML
-                <p class="submit">
+        <script src="https://code.jquery.com/jquery-3.7.1.js" integrity="sha256-eKhayi8LEQwp4NKxN+CfCh+3qOVUtJn3QNZ0TciWLP4=" crossorigin="anonymous"></script>
+                <form method="post" class="sett_percent"  id="sui2">
+                <h2>Настройки процентов</h2>
+                <span>
+                    <p>Низкая уникальность (0-30)</p>
+                    <input id="low_s" required value="{$db->a1}">
+                </span>
+                <span>
+                    <p>Средняя уникальность (31-85)</p>
+                    <input id="medium_s" required value="{$db->b1}">
+                </span>
+                <span>
+                    <p>Высокая уникальность (86-100)</p>
+                    <input id="high_s" required value="{$db->c1}">
+                </span>
+                
+                <p class="submit" style="display:none;">
                     <input type="submit" class="button-primary" value="Сохранить настройки" />
                 </p>
             </form>
+            <style>
+                .sett_percent span {
+                    display:flex;
+                }
+                .sett_percent span * {
+                    line-height:15px;
+                }
+                .sett_percent span input {
+                    width:350px;
+                    margin-top:8px;
+                    border-radius:3px;
+                    border: 1px solid grey;
+                    margin-left:auto;
+                    height:30px;
+                }
+                .sett_percent {
+                    width:570px;
+                }
+                .sett_percent span p {
+                    color:black;
+                    font-size:14px;
+                    font-weight:500;
+                }
+            </style>
+HTML;
+        echo '<form method="post" enctype="multipart/form-data" action="options.php" id="sui1">';
+        echo settings_fields($this->settingsGroup);
+        echo do_settings_sections($this->pageName);
+        echo <<<HTML
+                <p class="submit" style="display:none;">
+                    <input type="submit" id="sui1" class="button-primary" value="Сохранить настройки" />
+                </p>
+            </form>
+            <p class="submit">
+                    <input type="submit" class="button-primary" onclick="submitFormsWla()" value="Сохранить настройки" />
+            </p>
+            <script>
+                function submitFormsWla(){
+                    $.ajax({
+                        "url" : "/wp-admin/options-general.php?page=api-content-watch.php",
+                        "method" : "post",
+                        "data" : {"low_s" : $("#low_s").val(), "medium_s" : $("#medium_s").val(), "high_s" : $("#high_s").val()}
+                    }).done(function() {
+                      document.getElementById("sui1").submit();
+                    });
+                }
+            </script>
 HTML;
 
         if ($this->getOption('Content-watch_api_key')) {
@@ -160,7 +260,6 @@ HTML;
             'desc'      => $desc,
             'label_for' => 'Content-watch_api_key'
         );
-
         add_settings_field(
             'my_text_field',
             'Ваш API ключ',
@@ -380,6 +479,7 @@ HTML;
         $timestamp = time() + get_option('gmt_offset') * 3600;
         update_post_meta($postId, "content-watch-date", $timestamp);
         update_post_meta($postId, "content-watch", $text_done);
+        update_post_meta($postId, "content-prcnt", intval($return["percent"]));
         update_post_meta($postId, "content-watch-check", "nocheck");
         return true;
     }
@@ -605,4 +705,99 @@ HTML;
                 break;
         }
     }
+}
+add_filter( 'parse_query', 'admin_posts_filter' );
+add_action( 'restrict_manage_posts', 'admin_posts_filter_restrict_manage_posts' );
+add_action( 'save_post', 'add_content_prcnt' );
+function add_content_prcnt( $postId ) {
+    delete_post_meta($postId, "content-prcnt");
+}
+ 
+function admin_posts_filter( $query ) {
+    global $pagenow;
+    global $wpdb;
+    $pref = $wpdb->get_blog_prefix().'acw_wla';
+    $db = $wpdb->get_row("SELECT * FROM $pref");
+    if ( is_admin() && $pagenow=='edit.php') {
+        if (isset($_GET['Admin_f_wla'])) {
+            if ($_GET['Admin_f_wla'] == "none") {
+                $query->query_vars['meta_query'] = array(
+            		array(
+            			'key' => 'content-prcnt',
+            			'compare' => "NOT EXISTS"
+            		)
+            	);
+            } else if ($_GET['Admin_f_wla'] == "low") {
+                $a1 = explode("-",$db->a1);
+                $query->query_vars['meta_query'] = array(
+                    array(
+                        'key' => 'content-prcnt',
+            			'value' => array(intval($a1[0]), intval($a[1])),
+            			'type' => 'numeric',
+            			'compare' => 'BETWEEN'
+                    )
+                );
+            } else if ($_GET['Admin_f_wla'] == "medium") {
+                $a1 = explode("-",$db->b1);
+                $query->query_vars['meta_query'] = array(
+                    array(
+                        'key' => 'content-prcnt',
+            			'value' => array(intval($a1[0]), intval($a[1])),
+            			'type' => 'numeric',
+            			'compare' => 'BETWEEN'
+                    )
+                );
+            } else if ($_GET['Admin_f_wla'] == "high") {
+                $a1 = explode("-",$db->c1);
+                $query->query_vars['meta_query'] = array(
+                    array(
+                        'key' => 'content-prcnt',
+            			'value' => array(intval($a1[0]), intval($a[1])),
+            			'type' => 'numeric',
+            			'compare' => 'BETWEEN'
+                    )
+                );
+            }
+        }
+    }
+}
+ 
+function admin_posts_filter_restrict_manage_posts() {
+    global $wpdb, $pagenow;
+ 
+    if ($pagenow != 'edit.php') return;
+    $fieldname = 'Admin_f_wla';
+    $ht = "";
+        if (isset($_GET['Admin_f_wla'])) {
+            if ($_GET['Admin_f_wla'] == "") {
+                $ht .= '<option selected value="">По умолчанию</option>';
+            } else {
+                $ht .= '<option value="">По умолчанию</option>';
+            }
+            if ($_GET['Admin_f_wla'] == "none") {
+                $ht .= '<option value="none">Не проверенные</option>';
+            } else {
+                $ht .= '<option value="none">Не проверенные</option>';
+            }
+            if ($_GET['Admin_f_wla'] == "low") {
+                $ht .= '<option selected value="low">Низкая уникальность</option>';
+            } else {
+                $ht .= '<option value="low">Низкая уникальность</option>';
+            }
+            if ($_GET['Admin_f_wla'] == "medium") {
+                $ht .= '<option selected value="medium">Средняя уникальность</option>';
+            } else {
+                $ht .= '<option value="medium">Средняя уникальность</option>';
+            }
+            if ($_GET['Admin_f_wla'] == "high") {
+                $ht .= '<option selected value="high">Высокая уникальность</option>';
+            } else {
+                $ht .= '<option value="high">Высокая уникальность</option>';
+            }
+        } else {
+            $ht .= '<option value="">По умолчанию</option><option value="none">Не проверенные</option><option value="low">Низкая уникальность</option><option value="medium">Средняя уникальность</option><option value="high">Высокая уникальность</option>';
+        }
+    $out = '<select name="' . $fieldname . '">
+        '.$ht.'</select>';
+    echo $out;
 }
