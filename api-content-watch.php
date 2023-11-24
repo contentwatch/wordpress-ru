@@ -13,6 +13,44 @@ $plugin->init();
 /**
  * Class ContentWatchPlugin
  */
+ 
+register_activation_hook( __FILE__, 'plugin_activate_acw_wla' );
+
+register_uninstall_hook(__FILE__, 'plugin_deactivate_acw_wla');
+
+function plugin_deactivate_acw_wla() {
+    global $wpdb;
+    $table_name = $wpdb->get_blog_prefix().'acw_wla';
+    $sql = "DROP TABLE IF EXISTS $table_name";
+    $wpdb->query($sql);
+}
+
+function plugin_activate_acw_wla(){
+	global $wpdb;
+    $table_name = $wpdb->get_blog_prefix().'acw_wla';
+    $query = $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ));
+    if ( ! $wpdb->get_var( $query ) == $table_name ) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    	$charset_collate = $wpdb->get_charset_collate();
+    	$sql = "CREATE TABLE {$table_name} (
+    	a1 varchar(255),
+    	b1 varchar(255),
+    	c1 varchar(255)
+    	)
+    	{$charset_collate};";
+    	dbDelta($sql);
+        $wpdb->insert($table_name,  array("a1" => "", "b1" => "", "c1" => ""));
+    }
+}
+ 
+ 
+if (isset($_POST['medium_s'])) {
+    global $wpdb;
+    $table_name = $wpdb->get_blog_prefix().'acw_wla';
+    $wpdb->query("UPDATE ".$table_name." SET `a1` = '".$_POST['low_s']."', `b1` = '".$_POST['medium_s']."', `c1` = '".$_POST['high_s']."'");
+}
+
+
 class ContentWatchPlugin
 {
     protected $pageName = 'api-content-watch.php';
@@ -65,7 +103,6 @@ class ContentWatchPlugin
         if (empty($options) || !is_array($options)) {
             return null;
         }
-
         return $options[$fullOptionName];
     }
 
@@ -116,7 +153,55 @@ HTML;
         } else {
             echo '<h2>Начало работы</h2>' . $stepsHtml;
         }
-
+        
+        global $wpdb;
+        $pref = $wpdb->get_blog_prefix().'acw_wla';
+        $db = $wpdb->get_row("SELECT * FROM $pref");
+        echo <<<HTML
+                <form method="post" class="sett_percent">
+                <h2>Настройки процентов</h2>
+                <span>
+                    <p>Низкая уникальность (0-30)</p>
+                    <input name="low_s" required value="{$db->a1}">
+                </span>
+                <span>
+                    <p>Средняя уникальность (31-85)</p>
+                    <input name="medium_s" required value="{$db->b1}">
+                </span>
+                <span>
+                    <p>Высокая уникальность (86-100)</p>
+                    <input name="high_s" required value="{$db->c1}">
+                </span>
+                
+                <p class="submit">
+                    <input type="submit" class="button-primary" value="Сохранить настройки" />
+                </p>
+            </form>
+            <style>
+                .sett_percent span {
+                    display:flex;
+                }
+                .sett_percent span * {
+                    line-height:15px;
+                }
+                .sett_percent span input {
+                    width:350px;
+                    margin-top:8px;
+                    border-radius:3px;
+                    border: 1px solid grey;
+                    margin-left:auto;
+                    height:30px;
+                }
+                .sett_percent {
+                    width:570px;
+                }
+                .sett_percent span p {
+                    color:black;
+                    font-size:14px;
+                    font-weight:500;
+                }
+            </style>
+HTML;
         echo '<form method="post" enctype="multipart/form-data" action="options.php">';
         echo settings_fields($this->settingsGroup);
         echo do_settings_sections($this->pageName);
@@ -160,7 +245,6 @@ HTML;
             'desc'      => $desc,
             'label_for' => 'Content-watch_api_key'
         );
-
         add_settings_field(
             'my_text_field',
             'Ваш API ключ',
@@ -616,9 +700,10 @@ function my_project_updated_send_email( $postId ) {
  
 function admin_posts_filter( $query ) {
     global $pagenow;
+    global $wpdb;
+    $pref = $wpdb->get_blog_prefix().'acw_wla';
+    $db = $wpdb->get_row("SELECT * FROM $pref");
     if ( is_admin() && $pagenow=='edit.php') {
-        //добавлям фильтрацию по городу в запрос
-        //var_dump($query);
         if (isset($_GET['Admin_f_wla'])) {
             if ($_GET['Admin_f_wla'] == "none") {
                 $query->query_vars['meta_query'] = array(
@@ -628,30 +713,33 @@ function admin_posts_filter( $query ) {
             		)
             	);
             } else if ($_GET['Admin_f_wla'] == "low") {
+                $a1 = explode("-",$db->a1);
                 $query->query_vars['meta_query'] = array(
                     array(
                         'key' => 'content-prcnt',
-            			'value' => 30,
+            			'value' => array(intval($a1[0]), intval($a[1])),
             			'type' => 'numeric',
-            			'compare' => '<'
+            			'compare' => 'BETWEEN'
                     )
                 );
             } else if ($_GET['Admin_f_wla'] == "medium") {
+                $a1 = explode("-",$db->b1);
                 $query->query_vars['meta_query'] = array(
                     array(
                         'key' => 'content-prcnt',
-            			'value' => array(31, 85),
+            			'value' => array(intval($a1[0]), intval($a[1])),
             			'type' => 'numeric',
             			'compare' => 'BETWEEN'
                     )
                 );
             } else if ($_GET['Admin_f_wla'] == "high") {
+                $a1 = explode("-",$db->c1);
                 $query->query_vars['meta_query'] = array(
                     array(
                         'key' => 'content-prcnt',
-            			'value' => 86,
+            			'value' => array(intval($a1[0]), intval($a[1])),
             			'type' => 'numeric',
-            			'compare' => '>'
+            			'compare' => 'BETWEEN'
                     )
                 );
             }
