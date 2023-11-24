@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content-Watch.ru API
 Author: Content Watch
-Version: 1.2
+Version: 1.2.1
 Description: Плагин для проверки уникальности контента
 Author URI: https://content-watch.ru/api/
 */
@@ -732,7 +732,7 @@ function admin_posts_filter( $query ) {
                 $query->query_vars['meta_query'] = array(
                     array(
                         'key' => 'content-prcnt',
-            			'value' => array(intval($a1[0]), intval($a[1])),
+            			'value' => array(intval($a1[0]), intval($a1[1])),
             			'type' => 'numeric',
             			'compare' => 'BETWEEN'
                     )
@@ -742,7 +742,7 @@ function admin_posts_filter( $query ) {
                 $query->query_vars['meta_query'] = array(
                     array(
                         'key' => 'content-prcnt',
-            			'value' => array(intval($a1[0]), intval($a[1])),
+            			'value' => array(intval($a1[0]), intval($a1[1])),
             			'type' => 'numeric',
             			'compare' => 'BETWEEN'
                     )
@@ -752,7 +752,7 @@ function admin_posts_filter( $query ) {
                 $query->query_vars['meta_query'] = array(
                     array(
                         'key' => 'content-prcnt',
-            			'value' => array(intval($a1[0]), intval($a[1])),
+            			'value' => array(intval($a1[0]), intval($a1[1])),
             			'type' => 'numeric',
             			'compare' => 'BETWEEN'
                     )
