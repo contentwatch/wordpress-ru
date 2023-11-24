@@ -39,7 +39,7 @@ function plugin_activate_acw_wla(){
     	)
     	{$charset_collate};";
     	dbDelta($sql);
-        $wpdb->insert($table_name,  array("a1" => "", "b1" => "", "c1" => ""));
+        $wpdb->insert($table_name,  array("a1" => "0-30", "b1" => "31-85", "c1" => "86-100"));
     }
 }
  
@@ -158,22 +158,23 @@ HTML;
         $pref = $wpdb->get_blog_prefix().'acw_wla';
         $db = $wpdb->get_row("SELECT * FROM $pref");
         echo <<<HTML
-                <form method="post" class="sett_percent">
+        <script src="https://code.jquery.com/jquery-3.7.1.js" integrity="sha256-eKhayi8LEQwp4NKxN+CfCh+3qOVUtJn3QNZ0TciWLP4=" crossorigin="anonymous"></script>
+                <form method="post" class="sett_percent"  id="sui2">
                 <h2>Настройки процентов</h2>
                 <span>
                     <p>Низкая уникальность (0-30)</p>
-                    <input name="low_s" required value="{$db->a1}">
+                    <input id="low_s" required value="{$db->a1}">
                 </span>
                 <span>
                     <p>Средняя уникальность (31-85)</p>
-                    <input name="medium_s" required value="{$db->b1}">
+                    <input id="medium_s" required value="{$db->b1}">
                 </span>
                 <span>
                     <p>Высокая уникальность (86-100)</p>
-                    <input name="high_s" required value="{$db->c1}">
+                    <input id="high_s" required value="{$db->c1}">
                 </span>
                 
-                <p class="submit">
+                <p class="submit" style="display:none;">
                     <input type="submit" class="button-primary" value="Сохранить настройки" />
                 </p>
             </form>
@@ -202,14 +203,28 @@ HTML;
                 }
             </style>
 HTML;
-        echo '<form method="post" enctype="multipart/form-data" action="options.php">';
+        echo '<form method="post" enctype="multipart/form-data" action="options.php" id="sui1">';
         echo settings_fields($this->settingsGroup);
         echo do_settings_sections($this->pageName);
         echo <<<HTML
-                <p class="submit">
-                    <input type="submit" class="button-primary" value="Сохранить настройки" />
+                <p class="submit" style="display:none;">
+                    <input type="submit" id="sui1" class="button-primary" value="Сохранить настройки" />
                 </p>
             </form>
+            <p class="submit">
+                    <input type="submit" class="button-primary" onclick="submitFormsWla()" value="Сохранить настройки" />
+            </p>
+            <script>
+                function submitFormsWla(){
+                    $.ajax({
+                        "url" : "/wp-admin/options-general.php?page=api-content-watch.php",
+                        "method" : "post",
+                        "data" : {"low_s" : $("#low_s").val(), "medium_s" : $("#medium_s").val(), "high_s" : $("#high_s").val()}
+                    }).done(function() {
+                      document.getElementById("sui1").submit();
+                    });
+                }
+            </script>
 HTML;
 
         if ($this->getOption('Content-watch_api_key')) {
