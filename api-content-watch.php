@@ -380,6 +380,7 @@ HTML;
         $timestamp = time() + get_option('gmt_offset') * 3600;
         update_post_meta($postId, "content-watch-date", $timestamp);
         update_post_meta($postId, "content-watch", $text_done);
+        update_post_meta($postId, "content-prcnt", intval($return["percent"]));
         update_post_meta($postId, "content-watch-check", "nocheck");
         return true;
     }
@@ -605,4 +606,95 @@ HTML;
                 break;
         }
     }
+}
+add_filter( 'parse_query', 'admin_posts_filter' );
+add_action( 'restrict_manage_posts', 'admin_posts_filter_restrict_manage_posts' );
+add_action( 'save_post', 'my_project_updated_send_email' );
+function my_project_updated_send_email( $postId ) {
+    delete_post_meta($postId, "content-prcnt");
+}
+ 
+function admin_posts_filter( $query ) {
+    global $pagenow;
+    if ( is_admin() && $pagenow=='edit.php') {
+        //добавлям фильтрацию по городу в запрос
+        //var_dump($query);
+        if (isset($_GET['Admin_f_wla'])) {
+            if ($_GET['Admin_f_wla'] == "none") {
+                $query->query_vars['meta_query'] = array(
+            		array(
+            			'key' => 'content-prcnt',
+            			'compare' => "NOT EXISTS"
+            		)
+            	);
+            } else if ($_GET['Admin_f_wla'] == "low") {
+                $query->query_vars['meta_query'] = array(
+                    array(
+                        'key' => 'content-prcnt',
+            			'value' => 30,
+            			'type' => 'numeric',
+            			'compare' => '<'
+                    )
+                );
+            } else if ($_GET['Admin_f_wla'] == "medium") {
+                $query->query_vars['meta_query'] = array(
+                    array(
+                        'key' => 'content-prcnt',
+            			'value' => array(31, 85),
+            			'type' => 'numeric',
+            			'compare' => 'BETWEEN'
+                    )
+                );
+            } else if ($_GET['Admin_f_wla'] == "high") {
+                $query->query_vars['meta_query'] = array(
+                    array(
+                        'key' => 'content-prcnt',
+            			'value' => 86,
+            			'type' => 'numeric',
+            			'compare' => '>'
+                    )
+                );
+            }
+        }
+    }
+}
+ 
+function admin_posts_filter_restrict_manage_posts() {
+    global $wpdb, $pagenow;
+ 
+    if ($pagenow != 'edit.php') return;
+    $fieldname = 'Admin_f_wla';
+    $ht = "";
+        if (isset($_GET['Admin_f_wla'])) {
+            if ($_GET['Admin_f_wla'] == "") {
+                $ht .= '<option selected value="">По умолчанию</option>';
+            } else {
+                $ht .= '<option value="">По умолчанию</option>';
+            }
+            if ($_GET['Admin_f_wla'] == "none") {
+                $ht .= '<option value="none">Не проверенные</option>';
+            } else {
+                $ht .= '<option value="none">Не проверенные</option>';
+            }
+            if ($_GET['Admin_f_wla'] == "low") {
+                $ht .= '<option selected value="low">Низкая уникальность</option>';
+            } else {
+                $ht .= '<option value="low">Низкая уникальность</option>';
+            }
+            if ($_GET['Admin_f_wla'] == "medium") {
+                $ht .= '<option selected value="medium">Средняя уникальность</option>';
+            } else {
+                $ht .= '<option value="medium">Средняя уникальность</option>';
+            }
+            if ($_GET['Admin_f_wla'] == "high") {
+                $ht .= '<option selected value="high">Высокая уникальность</option>';
+            } else {
+                $ht .= '<option value="high">Высокая уникальность</option>';
+            }
+        } else {
+            $ht .= '<option value="">По умолчанию</option><option value="none">Не проверенные</option><option value="low">Низкая уникальность</option><option value="medium">Средняя уникальность</option><option value="high">Высокая уникальность</option>';
+        }
+    $out = '<select name="' . $fieldname . '">
+        '.$ht.'</select>';
+    echo $out;
 }
