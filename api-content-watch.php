@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content-Watch.ru API
 Author: Content Watch
-Version: 1.3
+Version: 1.4
 Description: Плагин для проверки уникальности контента
 Author URI: https://content-watch.ru/api/
 */
@@ -103,6 +103,8 @@ class ContentWatchPlugin
         // создаем новую колонку
         add_filter('manage_edit-post_columns', array($this, 'add_column'), 4);
         add_filter('manage_edit-page_columns', array($this, 'add_column'), 4);
+        add_filter('manage_edit-post_sortable_columns', array($this, "sortable_column"));
+        add_filter('pre_get_posts', array($this, 'add_column_views_request'));
 
 
         // заполняем колонку данными
@@ -353,6 +355,22 @@ HTML;
      * @param $columns
      * @return mixed
      */
+     
+    public function sortable_column($sortable_columns)
+    {
+        $sortable_columns['cw_column'] = 'cw_column';
+        
+	    return $sortable_columns;
+    }
+    
+    function add_column_views_request( $object ){
+    	if( $object->get('orderby') != 'cw_column' )
+    		return;
+    
+    	$object->set('meta_key', 'content-prcnt');
+    	$object->set('orderby', 'meta_value_num');
+    }
+    
     public function add_column($columns)
     {
         $columns['cw_column'] = 'Content-watch';
@@ -846,4 +864,5 @@ function admin_posts_filter_wla() {
     } else {
         echo '<select name="acw_wla"><option value="">Все оценки уникальности</option><option value="none">Не проверенные</option><option value="low">Низкая уникальность</option><option value="medium">Средняя уникальность</option><option value="high">Высокая уникальность</option></select>';
     }
+    
 }
